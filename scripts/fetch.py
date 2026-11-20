@@ -4,7 +4,7 @@
 Dataset: MyLA311 Cases 2026 (data.lacity.org, id 2cy6-i7zn).
 Optional env var SOCRATA_APP_TOKEN raises rate limits (never commit it).
 """
-import json, os, sys, urllib.parse, urllib.request
+import json, os, sys, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timedelta, timezone
 
 DATASET = os.environ.get("SOCRATA_DATASET", "2cy6-i7zn")
@@ -25,8 +25,18 @@ if os.environ.get("SOCRATA_APP_TOKEN"):
     headers["X-App-Token"] = os.environ["SOCRATA_APP_TOKEN"]
 
 url = f"https://data.lacity.org/resource/{DATASET}.json?" + urllib.parse.urlencode(params)
-with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as r:
-    rows = json.load(r)
+def get(h):
+    with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=120) as r:
+        return json.load(r)
+
+try:
+    rows = get(headers)
+except urllib.error.HTTPError as e:
+    if e.code in (401, 403) and "X-App-Token" in headers:
+        print("app token rejected; retrying without it", file=sys.stderr)
+        rows = get({"Accept": "application/json"})
+    else:
+        raise
 
 def num(v):
     try: return round(float(v), 6)
