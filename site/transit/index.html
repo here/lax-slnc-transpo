@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Silver Lake Transit Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--nc:#0b6bcb}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--nc:#6db3ff}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.05rem;margin:20px 0 6px}
+.sub{color:var(--mut);margin:0 0 12px}a{color:var(--acc)}
+#map{height:600px;border:1px solid var(--line);border-radius:6px;margin:12px 0}
+@media(max-width:700px){#map{height:70vh}}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:8px 0}
+.legend label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sw{display:inline-block;width:26px;height:6px;border-radius:3px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.note{border-left:3px solid var(--line);padding:2px 12px;color:var(--mut);margin:12px 0}
+.chip{display:inline-block;padding:1px 7px;border-radius:10px;color:#fff;font-size:.85em;margin-right:4px}
+</style></head><body><main>
+<p class="sub"><a href="../">&larr; 311 dashboard</a></p>
+<h1>Transit through Silver Lake NC</h1>
+<p class="sub" id="meta">Loading…</p>
+<div class="legend" id="legend"></div>
+<div id="map"></div>
+<div class="note" id="bnote"></div>
+
+<h2>B Line connections</h2>
+<p class="sub">The B Line (Metro subway) runs under Vermont Ave, just west of the NC. For each station, the nearest stop of each local bus route and the walking-ish (straight-line) distance. Under about 150&nbsp;m is the same corner.</p>
+<div class="scroll"><table><thead><tr><th>B Line station</th><th>Route</th><th>Nearest stop</th><th>Distance</th></tr></thead><tbody id="conn"></tbody></table></div>
+<p class="sub">Connections are computed from the schedule data, not verified on the ground. Route&nbsp;10 does not meet the B Line at a station; its nearest stop is Melrose&nbsp;/&nbsp;Vermont.</p>
+
+<p class="sub">Map: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Routes and stops: LA Metro GTFS (<a href="https://gitlab.com/LACMTA/gtfs_bus">bus</a>, <a href="https://gitlab.com/LACMTA/gtfs_rail">rail</a>). Thick lines are inside the NC outline; thin lines are the same route outside it.</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const NAMES={"2":"Bus 2 · Sunset / Alvarado","4":"Bus 4 · Santa Monica Blvd","10":"Bus 10/48 · Melrose","92":"Bus 92 · Glendale Blvd","182":"Bus 182 · Figueroa–York","B":"B Line (subway)"};
+const map=L.map("map",{zoomSnap:0.25});
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map);
+const groups={};
+fetch("data/transit.json").then(r=>r.json()).then(d=>{
+  $("meta").textContent="Bus routes 2, 4, 10, 92, 182 and the B Line · schedule data updated "+d.generated.slice(0,10);
+  $("bnote").textContent=d.boundary_note+" Replace with the official boundary when available.";
+  const bounds=[[d.view[1],d.view[0]],[d.view[3],d.view[2]]];
+  map.fitBounds(bounds,{padding:[12,12]});
+  L.geoJSON(d.boundary,{style:{color:getComputedStyle(document.documentElement).getPropertyValue("--nc")||"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.05}}).addTo(map).bindTooltip("Silver Lake NC (approximate)");
+  const order=["2","4","10","92","182","B"];
+  order.forEach(r=>{groups[r]=L.layerGroup().addTo(map)});
+  d.lines.forEach(l=>{
+    L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:d.colors[l.route],weight:l.route==="B"?5:(l.in_nc?5:2.5),opacity:l.in_nc||l.route==="B"?.9:.55,dashArray:l.route==="B"?"2 8":null})
+      .bindTooltip(NAMES[l.route]).addTo(groups[l.route]);
+  });
+  d.stops.forEach(s=>{
+    if(s.mode==="rail"){
+      L.circleMarker([s.lat,s.lon],{radius:9,color:"#fff",weight:2,fillColor:d.colors.B,fillOpacity:1}).addTo(groups.B)
+        .bindPopup(`<b>${esc(s.name)}</b><br>B Line`);
+    }else{
+      const r=s.routes.filter(x=>d.colors[x]);
+      r.forEach((x,i)=>L.circleMarker([s.lat,s.lon],{radius:s.in_nc?4:3,color:"#fff",weight:1,fillColor:d.colors[x],fillOpacity:.95}).addTo(groups[x])
+        .bindPopup(`<b>${esc(s.name)}</b><br>${s.routes.map(y=>NAMES[y]||y).map(esc).join("<br>")}`));
+    }
+  });
+  $("legend").innerHTML=order.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${d.colors[r]}"></span>${esc(NAMES[r])}</label>`).join("");
+  $("legend").addEventListener("change",e=>{const r=e.target.dataset.r;e.target.checked?groups[r].addTo(map):map.removeLayer(groups[r])});
+  const rows=[];
+  d.stops.filter(s=>s.mode==="rail").sort((a,b)=>b.lat-a.lat).forEach(s=>{
+    const cs=Object.entries(s.connections||{});
+    if(!cs.length) rows.push(`<tr><td>${esc(s.name)}</td><td colspan="3">No stop of these routes within 1 km</td></tr>`);
+    cs.sort((a,b)=>a[1].m-b[1].m).forEach(([r,c],i)=>rows.push(`<tr><td>${i?"":esc(s.name)}</td><td><span class="chip" style="background:${d.colors[r]}">${esc(r)}</span></td><td>${esc(c.stop)}</td><td>${c.m<=150?"same corner ("+c.m+" m)":c.m+" m"}</td></tr>`));
+  });
+  $("conn").innerHTML=rows.join("");
+}).catch(e=>$("meta").textContent="Failed to load data: "+e);
+</script></main></body></html>
