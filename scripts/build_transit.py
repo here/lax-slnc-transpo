@@ -18,12 +18,14 @@ from shapely import concave_hull
 from shapely.geometry import LineString, MultiPoint, Point, mapping
 from shapely.ops import unary_union
 
-BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "182": "182-13201"}
-BUS_COLORS = {"2": "#d95f02", "4": "#1b9e77", "10": "#7570b3", "92": "#e7298a", "182": "#66a61e"}
+BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "93": "93-13201", "182": "182-13201"}
+DASH_ROUTES = {"DASH": "4869"}   # LADOT DASH Pico Union/Echo Park (not in the Metro feed)
+BUS_COLORS = {"2": "#d95f02", "4": "#1b9e77", "10": "#7570b3", "92": "#e7298a", "93": "#a6761d", "182": "#66a61e", "DASH": "#e6ab02"}
 RAIL_ROUTE, RAIL_COLOR = "802", "#eb131b"  # B Line
 GITLAB = "https://gitlab.com/LACMTA/{}/-/raw/master/{}"
+LADOT_GTFS = "https://ladotbus.com/gtfs"   # LADOT DASH feed; see their GTFS developer license
 OUT = os.path.join(os.path.dirname(__file__), "..", "site", "transit", "data", "transit.json")
-MARGIN_DEG = 0.006        # ~600 m of context around the NC outline
+MARGIN_DEG = 0.010        # ~1 km of context around the NC outline (shows the Echo Park DASH)
 MAX_WALK_M = 1000         # list nearest stop of each route within this walk of a B Line station
 
 
@@ -63,11 +65,14 @@ def boundary():
 
 def main():
     tmp = tempfile.mkdtemp(prefix="gtfs_")
-    bus, rail = os.path.join(tmp, "bus"), os.path.join(tmp, "rail")
-    os.makedirs(bus); os.makedirs(rail)
+    bus, rail, dash = (os.path.join(tmp, n) for n in ("bus", "rail", "dash"))
+    for d_ in (bus, rail, dash):
+        os.makedirs(d_)
     print("downloading GTFS…", file=sys.stderr)
     fetch(GITLAB.format("gtfs_bus", "gtfs_bus.zip"), os.path.join(tmp, "bus.zip"))
     zipfile.ZipFile(os.path.join(tmp, "bus.zip")).extractall(bus)
+    fetch(LADOT_GTFS, os.path.join(tmp, "dash.zip"))
+    zipfile.ZipFile(os.path.join(tmp, "dash.zip")).extractall(dash)
     for f in ("routes", "trips", "shapes", "stops", "stop_times"):
         fetch(GITLAB.format("gtfs_rail", f + ".txt"), os.path.join(rail, f + ".txt"))
 
@@ -81,6 +86,7 @@ def main():
 
     lines, all_stops = [], {}
     feeds = [(bus, dict((rid, k) for k, rid in BUS_ROUTES.items()), "bus"),
+             (dash, dict((rid, k) for k, rid in DASH_ROUTES.items()), "bus"),
              (rail, {RAIL_ROUTE: "B"}, "rail")]
     for d, wanted, mode in feeds:
         trips = defaultdict(Counter)   # route_id -> (shape_id, dir) -> n
@@ -133,7 +139,7 @@ def main():
             if s["stop_id"] in stop_routes:
                 p = (float(s["stop_lon"]), float(s["stop_lat"]))
                 if window.contains(Point(p)):
-                    all_stops[(mode, s["stop_id"])] = {
+                    all_stops[(d, s["stop_id"])] = {
                         "id": s["stop_id"], "name": s["stop_name"], "lon": round(p[0], 6), "lat": round(p[1], 6),
                         "mode": mode, "routes": sorted(stop_routes[s["stop_id"]]),
                         "in_nc": nc.contains(Point(p))}
@@ -145,7 +151,7 @@ def main():
         for b in (s for s in stops if s["mode"] == "bus"):
             m = meters((st["lon"], st["lat"]), (b["lon"], b["lat"]))
             for r in b["routes"]:
-                if r in BUS_ROUTES and m <= MAX_WALK_M and m < conn.get(r, {"m": 1e9})["m"]:
+                if r in BUS_COLORS and m <= MAX_WALK_M and m < conn.get(r, {"m": 1e9})["m"]:
                     conn[r] = {"m": round(m), "stop": b["name"], "lon": b["lon"], "lat": b["lat"]}
         st["connections"] = dict(sorted(conn.items()))
 
