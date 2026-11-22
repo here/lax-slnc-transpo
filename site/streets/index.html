@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Silver Lake Key Streets</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f4f1ea;--lbl:rgba(255,255,255,.92)}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:rgba(30,30,30,.92)}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}a{color:var(--acc)}
+#map{height:720px;border:1px solid var(--line);border-radius:6px;margin:12px 0;background:var(--canvas)}
+@media(max-width:700px){#map{height:75vh}}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:8px 0}
+.legend label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sw{display:inline-block;width:26px;height:6px;border-radius:3px}
+.lbl{background:var(--lbl);color:var(--fg);border:0;font-weight:600;box-shadow:none;padding:1px 6px}
+.stn{background:#fff;color:#111;border:2px solid #eb131b;font-weight:700;box-shadow:none}
+</style></head><body><main>
+<p class="sub"><a href="../">&larr; 311 dashboard</a> · <a href="../transit/">Transit map</a></p>
+<h1>Silver Lake key streets</h1>
+<p class="sub" id="meta">Loading…</p>
+<div class="legend" id="legend"></div>
+<div id="map"></div>
+<p class="sub">Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a> public road network. Train stops: LA Metro B Line (GTFS). Basemap, when turned on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. The NC outline is approximate (derived from 311 case locations). <a href="silver-lake-streets.png">Download as PNG</a>.</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const PAL=["#d95f02","#1b9e77","#7570b3","#e7298a","#66a61e","#e6ab02","#a6761d","#1f78b4","#b15928","#6a3d9a","#33a02c","#444444"];
+const map=L.map("map",{zoomSnap:0.25,zoomControl:true});
+const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors",opacity:.55});
+fetch("data/streets.json").then(r=>r.json()).then(d=>{
+  const names=Object.keys(d.streets),groups={};
+  $("meta").textContent=`${names.length} streets and the B Line train stops. Toggle streets in the legend.`;
+  map.fitBounds([[d.view[1],d.view[0]],[d.view[3],d.view[2]]],{padding:[10,10]});
+  names.forEach((n,i)=>{
+    const g=L.layerGroup().addTo(map),col=PAL[i%PAL.length],fwy=/101/.test(n);groups[n]=g;
+    d.streets[n].forEach(c=>{
+      const ll=c.map(p=>[p[1],p[0]]);
+      if(fwy)L.polyline(ll,{color:"#fff",weight:11,opacity:1,lineCap:"round"}).addTo(g);
+      L.polyline(ll,{color:col,weight:fwy?7:5,opacity:.95,lineCap:"round",lineJoin:"round"}).bindTooltip(n).addTo(g);
+    });
+    const m=d.labels[n];
+    if(m)L.circleMarker([m[1],m[0]],{radius:0.5,opacity:0,fillOpacity:0,interactive:false}).addTo(g).bindTooltip(n,{permanent:true,direction:"center",className:"lbl"});
+  });
+  const st=L.layerGroup().addTo(map);groups["__stn"]=st;
+  d.stations.forEach(s=>{
+    L.circleMarker([s.lat,s.lon],{radius:9,color:"#fff",weight:2,fillColor:"#eb131b",fillOpacity:1}).addTo(st)
+      .bindTooltip(s.name.replace(/ Station.*/,"")+" (B Line)",{permanent:true,direction:"left",offset:[-9,0],className:"stn"});
+  });
+  const nc=L.geoJSON(d.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.04}}).bindTooltip("Silver Lake NC (approximate)");
+  groups["__nc"]=nc;groups["__osm"]=tiles;
+  $("legend").innerHTML=
+    `<label><input type="checkbox" data-r="__osm"><span class="sw" style="background:#aab"></span>OpenStreetMap basemap</label>`+
+    `<label><input type="checkbox" data-r="__nc"><span class="sw" style="background:repeating-linear-gradient(90deg,#0b6bcb 0 6px,transparent 6px 10px)"></span>NC outline (approximate)</label>`+
+    `<label><input type="checkbox" data-r="__stn" checked><span class="sw" style="background:#eb131b"></span>B Line stops</label>`+
+    names.map((n,i)=>`<label><input type="checkbox" data-r="${esc(n)}" checked><span class="sw" style="background:${PAL[i%PAL.length]}"></span>${esc(n)}</label>`).join("");
+  $("legend").addEventListener("change",e=>{const g=groups[e.target.dataset.r];if(!g)return;e.target.checked?g.addTo(map):map.removeLayer(g)});
+  window.__ready=true;
+}).catch(e=>$("meta").textContent="Failed to load data: "+e);
+</script></main></body></html>
