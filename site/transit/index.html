@@ -36,17 +36,17 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const NAMES={"2":"Bus 2 · Sunset / Alvarado","4":"Bus 4 · Santa Monica Blvd","10":"Bus 10/48 · Melrose","92":"Bus 92 · Glendale Blvd","93":"Bus 93 · Glendale–Hoover","DASH":"DASH Pico Union/Echo Park","182":"Bus 182 · Figueroa–York","B":"B Line (subway)"};
+const NAMES={"2":"Bus 2 · Sunset / Alvarado","4":"Bus 4 · Santa Monica Blvd","10":"Bus 10/48 · Melrose","92":"Bus 92 · Glendale Blvd","93":"Bus 93 · Glendale–Hoover","DASH":"DASH Pico Union/Echo Park","182":"Bus 182 · Figueroa–York","296":"Bus 296 · Griffith Park","B":"B Line (subway)"};
 const map=L.map("map",{zoomSnap:0.25});
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map);
 const groups={};
 fetch("data/transit.json").then(r=>r.json()).then(d=>{
-  $("meta").textContent="Bus routes 2, 4, 10, 92, 93, 182, the Echo Park DASH and the B Line · schedule data updated "+d.generated.slice(0,10);
+  $("meta").textContent="Bus routes 2, 4, 10, 92, 93, 182, 296, the Echo Park DASH and the B Line · schedule data updated "+d.generated.slice(0,10);
   $("bnote").textContent=d.boundary_note+" Replace with the official boundary when available.";
   const bounds=[[d.view[1],d.view[0]],[d.view[3],d.view[2]]];
   map.fitBounds(bounds,{padding:[12,12]});
   L.geoJSON(d.boundary,{style:{color:getComputedStyle(document.documentElement).getPropertyValue("--nc")||"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.05}}).addTo(map).bindTooltip("Silver Lake NC (approximate)");
-  const order=["2","4","10","92","93","182","DASH","B"];
+  const order=["2","4","10","92","93","182","296","DASH","B"];
   order.forEach(r=>{groups[r]=L.layerGroup().addTo(map)});
   d.lines.forEach(l=>{
     L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:d.colors[l.route],weight:l.route==="B"?5:(l.in_nc?5:2.5),opacity:l.in_nc||l.route==="B"?.9:.55,dashArray:l.route==="B"?"2 8":null})

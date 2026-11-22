@@ -18,9 +18,9 @@ from shapely import concave_hull
 from shapely.geometry import LineString, MultiPoint, Point, mapping
 from shapely.ops import unary_union
 
-BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "93": "93-13201", "182": "182-13201"}
+BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "93": "93-13201", "182": "182-13201", "296": "296-13201"}
 DASH_ROUTES = {"DASH": "4869"}   # LADOT DASH Pico Union/Echo Park (not in the Metro feed)
-BUS_COLORS = {"2": "#d95f02", "4": "#1b9e77", "10": "#7570b3", "92": "#e7298a", "93": "#a6761d", "182": "#66a61e", "DASH": "#e6ab02"}
+BUS_COLORS = {"2": "#d95f02", "4": "#1b9e77", "10": "#7570b3", "92": "#e7298a", "93": "#a6761d", "182": "#66a61e", "296": "#444444", "DASH": "#e6ab02"}
 RAIL_ROUTE, RAIL_COLOR = "802", "#eb131b"  # B Line
 GITLAB = "https://gitlab.com/LACMTA/{}/-/raw/master/{}"
 LADOT_GTFS = "https://ladotbus.com/gtfs"   # LADOT DASH feed; see their GTFS developer license
