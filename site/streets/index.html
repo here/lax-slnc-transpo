@@ -1,60 +1,71 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Silver Lake Key Streets</title>
+<title>Silver Lake Transit Over Key Streets</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f4f1ea;--lbl:rgba(255,255,255,.92)}
-@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:rgba(30,30,30,.92)}}
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9)}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9)}}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
 main{max-width:1100px;margin:0 auto;padding:16px}
 h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}a{color:var(--acc)}
-#map{height:720px;border:1px solid var(--line);border-radius:6px;margin:12px 0;background:var(--canvas)}
+#map{height:760px;border:1px solid var(--line);border-radius:6px;margin:12px 0;background:var(--canvas)}
 @media(max-width:700px){#map{height:75vh}}
 .legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:8px 0}
 .legend label{display:flex;align-items:center;gap:6px;cursor:pointer}
 .sw{display:inline-block;width:26px;height:6px;border-radius:3px}
-.lbl{background:var(--lbl);color:var(--fg);border:0;font-weight:600;box-shadow:none;padding:1px 6px}
+.slbl{background:none;border:0;box-shadow:none;color:var(--lbl);font-size:11px;font-weight:500;letter-spacing:.2px;padding:0;text-shadow:0 0 3px var(--halo),0 0 3px var(--halo),0 0 3px var(--halo)}
+.slbl:before{display:none}
 .stn{background:#fff;color:#111;border:2px solid #eb131b;font-weight:700;box-shadow:none}
 </style></head><body><main>
-<p class="sub"><a href="../">&larr; 311 dashboard</a> · <a href="../transit/">Transit map</a></p>
-<h1>Silver Lake key streets</h1>
+<p class="sub"><a href="../">&larr; 311 dashboard</a> · <a href="../transit/">Full transit page</a></p>
+<h1>Silver Lake transit over key streets <span class="sub">(example)</span></h1>
 <p class="sub" id="meta">Loading…</p>
 <div class="legend" id="legend"></div>
 <div id="map"></div>
-<p class="sub">Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a> public road network. Train stops: LA Metro B Line (GTFS). Basemap, when turned on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. The NC outline is approximate (derived from 311 case locations). <a href="silver-lake-streets.png">Download as PNG</a>.</p>
+<p class="sub">A lighter companion to the <a href="../transit/">full transit map</a>: the transit lines are the point, and only twelve streets (Vermont, Sunset, Silver Lake Blvd, Hyperion, Temple, Glendale, Alvarado, Rowena, Santa Monica, Beverly, Melrose, US-101) are drawn as thin gray lines for orientation. Bus stops are left off; B Line stops are shown. Dotted lines are the B Line; dashed lines are nearby routes outside the NC. Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a>. Transit: LA Metro and LADOT GTFS. Basemap, when on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. NC outline is approximate. <a href="silver-lake-streets.png">Download as PNG</a>.</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const PAL=["#d95f02","#1b9e77","#7570b3","#e7298a","#66a61e","#e6ab02","#a6761d","#1f78b4","#b15928","#6a3d9a","#33a02c","#444444"];
-const map=L.map("map",{zoomSnap:0.25,zoomControl:true});
-const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors",opacity:.55});
-fetch("data/streets.json").then(r=>r.json()).then(d=>{
-  const names=Object.keys(d.streets),groups={};
-  $("meta").textContent=`${names.length} streets and the B Line train stops. Toggle streets in the legend.`;
-  map.fitBounds([[d.view[1],d.view[0]],[d.view[3],d.view[2]]],{padding:[10,10]});
-  names.forEach((n,i)=>{
-    const g=L.layerGroup().addTo(map),col=PAL[i%PAL.length],fwy=/101/.test(n);groups[n]=g;
-    d.streets[n].forEach(c=>{
-      const ll=c.map(p=>[p[1],p[0]]);
-      if(fwy)L.polyline(ll,{color:"#fff",weight:11,opacity:1,lineCap:"round"}).addTo(g);
-      L.polyline(ll,{color:col,weight:fwy?7:5,opacity:.95,lineCap:"round",lineJoin:"round"}).bindTooltip(n).addTo(g);
-    });
-    const m=d.labels[n];
-    if(m)L.circleMarker([m[1],m[0]],{radius:0.5,opacity:0,fillOpacity:0,interactive:false}).addTo(g).bindTooltip(n,{permanent:true,direction:"center",className:"lbl"});
+const NAMES={"2":"Bus 2 · Sunset / Alvarado","4":"Bus 4 · Santa Monica Blvd","10":"Bus 10/48 · Melrose","92":"Bus 92 · Glendale Blvd","93":"Bus 93 · Glendale–Hoover","182":"Bus 182 · Figueroa–York","296":"Bus 296 · Griffith Park","DASH":"DASH Pico Union/Echo Park","14":"Bus 14/37 · Beverly (nearby)","204":"Bus 204 · Vermont local (nearby)","754":"Bus 754 · Vermont rapid (nearby)","DASH-LF":"DASH Observatory/Los Feliz (nearby)","B":"B Line (subway)"};
+const ORDER=["2","4","10","92","93","182","296","DASH","14","204","754","DASH-LF","B"];
+const NEARBY=new Set(["14","204","754","DASH-LF"]);
+const map=L.map("map",{zoomSnap:0.25});
+map.createPane("ref").style.zIndex=380;      // streets sit under the transit lines
+const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors",opacity:.45});
+Promise.all([fetch("data/streets.json").then(r=>r.json()),fetch("../transit/data/transit.json").then(r=>r.json())]).then(([S,T])=>{
+  map.fitBounds([[T.view[1],T.view[0]],[T.view[3],T.view[2]]],{padding:[10,10]});
+  const groups={};
+  // reference streets: thin, gray, labeled in small type
+  const ref=L.layerGroup().addTo(map);groups.__ref=ref;
+  const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  Object.entries(S.streets).forEach(([n,lines])=>{
+    const fwy=/101/.test(n);
+    lines.forEach(c=>L.polyline(c.map(p=>[p[1],p[0]]),{pane:"ref",color:css(fwy?"--fwy":"--st"),weight:fwy?3:1.6,opacity:.9,lineCap:"round",lineJoin:"round",interactive:false}).addTo(ref));
+    const m=S.labels[n];
+    if(m)L.circleMarker([m[1],m[0]],{pane:"ref",radius:0.5,opacity:0,fillOpacity:0,interactive:false}).addTo(ref)
+      .bindTooltip(n.replace(/ \(.*\)/,""),{permanent:true,direction:"center",className:"slbl"});
   });
-  const st=L.layerGroup().addTo(map);groups["__stn"]=st;
-  d.stations.forEach(s=>{
-    L.circleMarker([s.lat,s.lon],{radius:9,color:"#fff",weight:2,fillColor:"#eb131b",fillOpacity:1}).addTo(st)
+  // transit lines: the point of the map
+  ORDER.forEach(r=>groups[r]=L.layerGroup().addTo(map));
+  T.lines.forEach(l=>{
+    L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:T.colors[l.route],weight:l.route==="B"?5:(l.in_nc?5:3),opacity:l.in_nc||l.route==="B"?.95:.7,
+      dashArray:l.route==="B"?"2 8":(NEARBY.has(l.route)?"7 5":null),lineCap:"round"}).bindTooltip(NAMES[l.route]||l.route).addTo(groups[l.route]);
+  });
+  // train stops only (no bus stops)
+  T.stops.filter(s=>s.mode==="rail").forEach(s=>{
+    L.circleMarker([s.lat,s.lon],{radius:9,color:"#fff",weight:2,fillColor:"#eb131b",fillOpacity:1}).addTo(groups.B)
       .bindTooltip(s.name.replace(/ Station.*/,"")+" (B Line)",{permanent:true,direction:"left",offset:[-9,0],className:"stn"});
   });
-  const nc=L.geoJSON(d.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.04}}).bindTooltip("Silver Lake NC (approximate)");
-  groups["__nc"]=nc;groups["__osm"]=tiles;
+  groups.__nc=L.geoJSON(T.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.04}}).bindTooltip("Silver Lake NC (approximate)");
+  groups.__osm=tiles;
+  const dashed='repeating-linear-gradient(90deg,#0b6bcb 0 6px,transparent 6px 10px)';
+  $("meta").textContent=`${ORDER.length-1} bus routes plus the B Line, over ${Object.keys(S.streets).length} reference streets. Toggle anything in the legend.`;
   $("legend").innerHTML=
+    `<label><input type="checkbox" data-r="__ref" checked><span class="sw" style="background:#a9a9a9;height:3px"></span>Reference streets</label>`+
     `<label><input type="checkbox" data-r="__osm"><span class="sw" style="background:#aab"></span>OpenStreetMap basemap</label>`+
-    `<label><input type="checkbox" data-r="__nc"><span class="sw" style="background:repeating-linear-gradient(90deg,#0b6bcb 0 6px,transparent 6px 10px)"></span>NC outline (approximate)</label>`+
-    `<label><input type="checkbox" data-r="__stn" checked><span class="sw" style="background:#eb131b"></span>B Line stops</label>`+
-    names.map((n,i)=>`<label><input type="checkbox" data-r="${esc(n)}" checked><span class="sw" style="background:${PAL[i%PAL.length]}"></span>${esc(n)}</label>`).join("");
+    `<label><input type="checkbox" data-r="__nc"><span class="sw" style="background:${dashed}"></span>NC outline (approximate)</label>`+
+    ORDER.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${T.colors[r]}"></span>${esc(NAMES[r])}</label>`).join("");
   $("legend").addEventListener("change",e=>{const g=groups[e.target.dataset.r];if(!g)return;e.target.checked?g.addTo(map):map.removeLayer(g)});
   window.__ready=true;
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
