@@ -51,6 +51,10 @@ def boundary():
         "$group": "lat,lon", "$limit": "50000"})
     with urllib.request.urlopen("https://data.lacity.org/resource/2cy6-i7zn.json?" + q, timeout=120) as r:
         pts = [(float(p["lon"]), float(p["lat"])) for p in json.load(r)]
+    # West edge per the council: 101 Freeway (south), Hoover St, Fountain Ave, Hyperion (north).
+    # Pin the Hoover corners so the hull reaches Fountain and the 101 exactly there.
+    pts += [(-118.2847, 34.0958),   # Hoover & Fountain
+            (-118.2845, 34.0768)]   # Hoover & 101 Freeway
     hull = concave_hull(MultiPoint(pts), ratio=0.3).buffer(0.0004).simplify(0.0001)
     if hull.geom_type != "Polygon":  # keep the biggest piece
         hull = max(hull.geoms, key=lambda g: g.area)
