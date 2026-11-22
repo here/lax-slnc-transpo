@@ -11,7 +11,7 @@ GeoJSON when available (LA GeoHub "Neighborhood Councils (Certified)").
 
 Needs: pip install shapely
 """
-import csv, io, json, math, os, sys, tempfile, urllib.parse, urllib.request, zipfile
+import csv, datetime as dt, io, json, math, os, statistics, sys, tempfile, urllib.parse, urllib.request, zipfile
 from collections import Counter, defaultdict
 
 from shapely import concave_hull
@@ -26,6 +26,9 @@ GITLAB = "https://gitlab.com/LACMTA/{}/-/raw/master/{}"
 LADOT_GTFS = "https://ladotbus.com/gtfs"   # LADOT DASH feed; see their GTFS developer license
 OUT = os.path.join(os.path.dirname(__file__), "..", "site", "transit", "data", "transit.json")
 MARGIN_DEG = 0.010        # ~1 km of context around the NC outline (shows the Echo Park DASH)
+# Headways: measured on one typical weekday (override with HEADWAY_DATE=YYYY-MM-DD).
+# Windows are hours of the service day. Peak = AM + PM; off-peak = early morning + evening/night.
+WINDOWS = {"peak": [(6, 9), (15, 19)], "midday": [(9, 15)], "offpeak": [(0, 6), (19, 30)]}
 MAX_WALK_M = 1000         # list nearest stop of each route within this walk of a B Line station
 
 
@@ -63,6 +66,55 @@ def boundary():
     return hull, len(pts)
 
 
+def service_date():
+    if os.environ.get("HEADWAY_DATE"):
+        return dt.date.fromisoformat(os.environ["HEADWAY_DATE"])
+    d = dt.date.today() + dt.timedelta(days=10)
+    while d.weekday() != 2:      # first Wednesday at least 10 days out (avoids holiday weeks)
+        d += dt.timedelta(days=1)
+    return d
+
+
+def active_services(feed_dir, day):
+    """service_ids running on `day`, from calendar.txt + calendar_dates.txt."""
+    ymd = day.strftime("%Y%m%d")
+    col = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"][day.weekday()]
+    on = set()
+    cal = os.path.join(feed_dir, "calendar.txt")
+    if os.path.exists(cal):
+        for r in rows(cal):
+            if r[col] == "1" and r["start_date"] <= ymd <= r["end_date"]:
+                on.add(r["service_id"])
+    cd = os.path.join(feed_dir, "calendar_dates.txt")
+    if os.path.exists(cd):
+        for r in rows(cd):
+            if r["date"] == ymd:
+                (on.add if r["exception_type"] == "1" else on.discard)(r["service_id"])
+    return on
+
+
+def secs(t):
+    h, m, sec = t.split(":")
+    return int(h) * 3600 + int(m) * 60 + int(sec)
+
+
+def hhmm(sec):
+    return f"{(sec // 3600) % 24:02d}:{(sec % 3600) // 60:02d}"
+
+
+def headways(deps):
+    """Median minutes between consecutive departures inside each window, per category."""
+    deps = sorted(deps)
+    out = {}
+    for cat, spans in WINDOWS.items():
+        gaps = []
+        for lo, hi in spans:
+            seg = [t for t in deps if lo * 3600 <= t < hi * 3600]
+            gaps += [(b - a) / 60 for a, b in zip(seg, seg[1:])]
+        out[cat] = round(statistics.median(gaps)) if gaps else None
+    return out
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="gtfs_")
     bus, rail, dash = (os.path.join(tmp, n) for n in ("bus", "rail", "dash"))
@@ -73,7 +125,7 @@ def main():
     zipfile.ZipFile(os.path.join(tmp, "bus.zip")).extractall(bus)
     fetch(LADOT_GTFS, os.path.join(tmp, "dash.zip"))
     zipfile.ZipFile(os.path.join(tmp, "dash.zip")).extractall(dash)
-    for f in ("routes", "trips", "shapes", "stops", "stop_times"):
+    for f in ("routes", "trips", "shapes", "stops", "stop_times", "calendar", "calendar_dates"):
         fetch(GITLAB.format("gtfs_rail", f + ".txt"), os.path.join(rail, f + ".txt"))
 
     nc, npts = boundary()
@@ -84,17 +136,21 @@ def main():
     from shapely.geometry import box
     window = box(*view)
 
-    lines, all_stops = [], {}
+    lines, all_stops, hw_rows = [], {}, []
+    day = service_date()
     feeds = [(bus, dict((rid, k) for k, rid in BUS_ROUTES.items()), "bus"),
              (dash, dict((rid, k) for k, rid in DASH_ROUTES.items()), "bus"),
              (rail, {RAIL_ROUTE: "B"}, "rail")]
     for d, wanted, mode in feeds:
         trips = defaultdict(Counter)   # route_id -> (shape_id, dir) -> n
-        trip_route = {}
+        trip_route, trip_info = {}, {}
+        on_day = active_services(d, day)
         for t in rows(os.path.join(d, "trips.txt")):
             if t["route_id"] in wanted:
                 trips[t["route_id"]][(t["shape_id"], t.get("direction_id", ""))] += 1
                 trip_route[t["trip_id"]] = t["route_id"]
+                if t["service_id"] in on_day:
+                    trip_info[t["trip_id"]] = (t["route_id"], t.get("direction_id", ""), t.get("trip_headsign", ""))
         keep = {}
         for rid, cnt in trips.items():
             by_dir = defaultdict(list)
@@ -130,11 +186,41 @@ def main():
         # stops served inside the window
         stop_routes = defaultdict(set)
         trip_ids = set(trip_route)
+        pos = {s["stop_id"]: (float(s["stop_lon"]), float(s["stop_lat"]), s["stop_name"])
+               for s in rows(os.path.join(d, "stops.txt")) if s["stop_lat"]}
+        cand = {i for i, (x, y, _) in pos.items() if window.contains(Point(x, y))}
+        deps = defaultdict(list)       # (route_id, dir, stop_id) -> departure seconds on `day`
+        last = {}                      # trip_id -> (stop_sequence, stop_id) of its final stop
         with open(os.path.join(d, "stop_times.txt"), newline="", encoding="utf-8-sig") as f:
             rd = csv.DictReader(f)
             for r in rd:
-                if r["trip_id"] in trip_ids:
-                    stop_routes[r["stop_id"]].add(wanted[trip_route[r["trip_id"]]])
+                tid = r["trip_id"]
+                if tid in trip_ids:
+                    stop_routes[r["stop_id"]].add(wanted[trip_route[tid]])
+                    if tid in trip_info:
+                        seq = int(r["stop_sequence"])
+                        if seq > last.get(tid, (-1, ""))[0]:
+                            last[tid] = (seq, r["stop_id"])
+                        if r["stop_id"] in cand:
+                            ri, di, _ = trip_info[tid]
+                            deps[(ri, di, r["stop_id"])].append(secs(r["departure_time"] or r["arrival_time"]))
+        # reference stop per route+direction: prefer stops at/near the NC, then most trips
+        by_rd = defaultdict(list)
+        for (ri, di, sid), v in deps.items():
+            x, y, _ = pos[sid]
+            by_rd[(ri, di)].append((Point(x, y).distance(nc) * 111_320, -len(v), sid, v))
+        heads = defaultdict(Counter)
+        for tid, (ri, di, h) in trip_info.items():
+            # Metro's feed has no headsigns: label the direction by the trip's terminal stop.
+            end = pos.get(last.get(tid, (0, ""))[1], (0, 0, ""))[2]
+            heads[(ri, di)][h or (f"to {end}" if end else "")] += 1
+        for (ri, di), cands in sorted(by_rd.items()):
+            near = [c for c in cands if c[0] <= 80] or [min(cands)]
+            dist, negn, sid, v = min(near, key=lambda c: (c[1], c[0]))
+            hw = headways(v)
+            hw_rows.append({"route": wanted[ri], "direction": heads[(ri, di)].most_common(1)[0][0] or f"Direction {di}",
+                            "stop": pos[sid][2], "dist_to_nc_m": round(dist), "trips": len(v),
+                            "first": hhmm(min(v)), "last": hhmm(max(v)), **hw})
         for s in rows(os.path.join(d, "stops.txt")):
             if s["stop_id"] in stop_routes:
                 p = (float(s["stop_lon"]), float(s["stop_lat"]))
@@ -159,10 +245,14 @@ def main():
            "gtfs_source": "https://gitlab.com/LACMTA/gtfs_bus , https://gitlab.com/LACMTA/gtfs_rail",
            "boundary_note": f"Approximate outline: concave hull of {npts} unique 311 case locations tagged SILVER LAKE NC. Not the official boundary.",
            "boundary": mapping(nc), "view": list(view), "colors": {**BUS_COLORS, "B": RAIL_COLOR},
-           "lines": lines, "stops": stops}
+           "lines": lines, "stops": stops,
+           "headways": {"date": day.isoformat(), "rows": hw_rows,
+                        "windows": {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "before 6 AM and after 7 PM"}}}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
+    for h in hw_rows:
+        print(f"  {h['route']:>5} {h['direction'][:22]:22} @{h['stop'][:28]:28} peak={h['peak']} mid={h['midday']} off={h['offpeak']} trips={h['trips']}", file=sys.stderr)
     print(f"lines={len(lines)} stops={len(stops)} stations={len(stations)} -> {OUT}", file=sys.stderr)
     for st in stations:
         print(f"  B Line: {st['name']}  " + ", ".join(f"{r}:{c['m']}m" for r, c in st["connections"].items()), file=sys.stderr)

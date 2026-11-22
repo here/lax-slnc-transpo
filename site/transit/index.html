@@ -16,6 +16,7 @@ h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.05rem;margin:20px 0 6px}
 .sw{display:inline-block;width:26px;height:6px;border-radius:3px}
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .note{border-left:3px solid var(--line);padding:2px 12px;color:var(--mut);margin:12px 0}
 .chip{display:inline-block;padding:1px 7px;border-radius:10px;color:#fff;font-size:.85em;margin-right:4px}
 </style></head><body><main>
@@ -25,6 +26,11 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;
 <div class="legend" id="legend"></div>
 <div id="map"></div>
 <div class="note" id="bnote"></div>
+
+<h2>How often they run</h2>
+<p class="sub" id="hwsub">Minutes between vehicles (headway) on a typical weekday.</p>
+<div class="scroll"><table><thead><tr><th>Route</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Measured at</th></tr></thead><tbody id="hw"></tbody></table></div>
+<p class="sub" id="hwnote"></p>
 
 <h2>B Line connections</h2>
 <p class="sub">The B Line (Metro subway) runs under Vermont Ave, just west of the NC. For each station, the nearest stop of each local bus route and the walking-ish (straight-line) distance. Under about 150&nbsp;m is the same corner.</p>
@@ -71,5 +77,13 @@ fetch("data/transit.json").then(r=>r.json()).then(d=>{
     cs.sort((a,b)=>a[1].m-b[1].m).forEach(([r,c],i)=>rows.push(`<tr><td>${i?"":esc(s.name)}</td><td><span class="chip" style="background:${d.colors[r]}">${esc(r)}</span></td><td>${esc(c.stop)}</td><td>${c.m<=150?"same corner ("+c.m+" m)":c.m+" m"}</td></tr>`));
   });
   $("conn").innerHTML=rows.join("");
+  const H=d.headways,fm=v=>v==null?"—":v,W=H.windows;
+  $("hwsub").textContent=`Minutes between vehicles (headway), typical weekday (${H.date}). Peak ${W.peak}; midday ${W.midday}; off-peak ${W.offpeak}.`;
+  let prev="";
+  $("hw").innerHTML=H.rows.slice().sort((a,b)=>order.indexOf(a.route)-order.indexOf(b.route)||a.direction.localeCompare(b.direction)).map(r=>{
+    const first=r.route!==prev;prev=r.route;
+    const where=esc(r.stop)+(r.dist_to_nc_m>80?` <span class="sub">(${r.dist_to_nc_m} m from NC)</span>`:"");
+    return `<tr><td>${first?`<span class="chip" style="background:${d.colors[r.route]}">${esc(r.route)}</span>`:""}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td><td>${where}</td></tr>`}).join("");
+  $("hwnote").textContent="Each figure is the median gap between consecutive departures at one reference stop per direction (the busiest stop at or nearest the NC), from the published schedule, not live arrivals. Route 10 includes route 48 trips. First/last times past midnight are shown on a 24-hour clock.";
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
 </script></main></body></html>
