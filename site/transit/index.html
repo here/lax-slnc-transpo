@@ -18,6 +18,8 @@ h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.05rem;margin:20px 0 6px}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .note{border-left:3px solid var(--line);padding:2px 12px;color:var(--mut);margin:12px 0}
+.stn{background:rgba(255,255,255,.9);color:#111;border:0;font-weight:600;box-shadow:none}
+.endlbl{font-weight:700;font-size:12px;color:#111;text-shadow:0 0 3px #fff,0 0 3px #fff;white-space:nowrap}
 .chip{display:inline-block;padding:1px 7px;border-radius:10px;color:#fff;font-size:.85em;margin-right:4px}
 </style></head><body><main>
 <p class="sub"><a href="../">&larr; 311 dashboard</a></p>
@@ -32,30 +34,42 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 <div class="scroll"><table><thead><tr><th>Route</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Measured at</th></tr></thead><tbody id="hw"></tbody></table></div>
 <p class="sub" id="hwnote"></p>
 
+<h2>Bus 2 and Bus 4 to rail</h2>
+<p class="sub" id="csub">Loading…</p>
+<div class="legend" id="clegend"></div>
+<div id="map2" style="height:680px;border:1px solid var(--line);border-radius:6px;margin:12px 0"></div>
+<div class="scroll"><table><thead><tr><th>Rail station</th><th>Rail lines</th><th>Bus 2 stop</th><th>Bus 4 stop</th></tr></thead><tbody id="ctrans"></tbody></table></div>
+<p class="sub" style="margin-top:14px"><b>D Line frequency at Westlake/MacArthur Park</b> (minutes between trains, weekday)</p>
+<div class="scroll"><table><thead><tr><th>Line</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th></tr></thead><tbody id="chw"></tbody></table></div>
+<p class="sub" id="cnote"></p>
+
 <h2>B Line connections</h2>
 <p class="sub">The B Line (Metro subway) runs under Vermont Ave, just west of the NC. For each station, the nearest stop of each local bus route and the walking-ish (straight-line) distance. Under about 150&nbsp;m is the same corner.</p>
 <div class="scroll"><table><thead><tr><th>B Line station</th><th>Route</th><th>Nearest stop</th><th>Distance</th></tr></thead><tbody id="conn"></tbody></table></div>
 <p class="sub">Connections are computed from the schedule data, not verified on the ground. Route&nbsp;10 does not meet the B Line at a station; its nearest stop is Melrose&nbsp;/&nbsp;Vermont.</p>
 
-<p class="sub">Map: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Routes and stops: LA Metro GTFS (<a href="https://gitlab.com/LACMTA/gtfs_bus">bus</a>, <a href="https://gitlab.com/LACMTA/gtfs_rail">rail</a>) and LADOT DASH GTFS (<a href="https://ladotbus.com/gtfs">ladotbus.com/gtfs</a>). Thick lines are inside the NC outline; thin lines are the same route outside it. The Echo Park DASH stays outside the NC, about 700&nbsp;m southeast along Echo Park Ave.</p>
+<p class="sub">Map: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Routes and stops: LA Metro GTFS (<a href="https://gitlab.com/LACMTA/gtfs_bus">bus</a>, <a href="https://gitlab.com/LACMTA/gtfs_rail">rail</a>) and LADOT DASH GTFS (<a href="https://ladotbus.com/gtfs">ladotbus.com/gtfs</a>). Thick lines are inside the NC; thin lines are the same route outside it (turn on the NC outline in the legend to see the edge). The dashed routes and the Echo Park DASH stay outside the NC; the Echo Park DASH runs about 700&nbsp;m southeast along Echo Park Ave.</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const NAMES={"2":"Bus 2 · Sunset / Alvarado","4":"Bus 4 · Santa Monica Blvd","10":"Bus 10/48 · Melrose","92":"Bus 92 · Glendale Blvd","93":"Bus 93 · Glendale–Hoover","DASH":"DASH Pico Union/Echo Park","182":"Bus 182 · Figueroa–York","296":"Bus 296 · Griffith Park","B":"B Line (subway)"};
+const NAMES={"2":"Bus 2 · Sunset / Alvarado","4":"Bus 4 · Santa Monica Blvd","10":"Bus 10/48 · Melrose","92":"Bus 92 · Glendale Blvd","93":"Bus 93 · Glendale–Hoover","DASH":"DASH Pico Union/Echo Park","182":"Bus 182 · Figueroa–York","296":"Bus 296 · Griffith Park","14":"Bus 14/37 · Beverly Blvd (nearby)","204":"Bus 204 · Vermont local (nearby)","754":"Bus 754 · Vermont rapid (nearby)","DASH-LF":"DASH Observatory/Los Feliz (nearby)","B":"B Line (subway)","D":"D Line (subway)"};
+const LAB={"DASH":"DASH EP","DASH-LF":"DASH LF"},lab=r=>LAB[r]||r;
+const NEARBY=new Set(["14","204","754","DASH-LF"]);
 const map=L.map("map",{zoomSnap:0.25});
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map);
 const groups={};
 fetch("data/transit.json").then(r=>r.json()).then(d=>{
-  $("meta").textContent="Bus routes 2, 4, 10, 92, 93, 182, 296, the Echo Park DASH and the B Line · schedule data updated "+d.generated.slice(0,10);
+  $("meta").textContent="Bus routes 2, 4, 10, 92, 93, 182, 296, the Echo Park DASH and the B Line, plus nearby routes 14/37, 204, 754 and DASH Observatory/Los Feliz (dashed) · schedule data updated "+d.generated.slice(0,10);
   $("bnote").textContent=d.boundary_note+" Replace with the official boundary when available.";
   const bounds=[[d.view[1],d.view[0]],[d.view[3],d.view[2]]];
   map.fitBounds(bounds,{padding:[12,12]});
-  L.geoJSON(d.boundary,{style:{color:getComputedStyle(document.documentElement).getPropertyValue("--nc")||"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.05}}).addTo(map).bindTooltip("Silver Lake NC (approximate)");
-  const order=["2","4","10","92","93","182","296","DASH","B"];
+  const ncLayer=L.geoJSON(d.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.05}}).bindTooltip("Silver Lake NC (approximate)");
+  const order=["2","4","10","92","93","182","296","DASH","14","204","754","DASH-LF","B"];
   order.forEach(r=>{groups[r]=L.layerGroup().addTo(map)});
+  groups.NC=ncLayer;   // off by default; toggled from the legend
   d.lines.forEach(l=>{
-    L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:d.colors[l.route],weight:l.route==="B"?5:(l.in_nc?5:2.5),opacity:l.in_nc||l.route==="B"?.9:.55,dashArray:l.route==="B"?"2 8":null})
+    L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:d.colors[l.route],weight:l.route==="B"?5:(l.in_nc?5:2.5),opacity:l.in_nc||l.route==="B"?.9:.55,dashArray:l.route==="B"?"2 8":(NEARBY.has(l.route)?"7 5":null)})
       .bindTooltip(NAMES[l.route]).addTo(groups[l.route]);
   });
   d.stops.forEach(s=>{
@@ -68,22 +82,48 @@ fetch("data/transit.json").then(r=>r.json()).then(d=>{
         .bindPopup(`<b>${esc(s.name)}</b><br>${s.routes.map(y=>NAMES[y]||y).map(esc).join("<br>")}`));
     }
   });
-  $("legend").innerHTML=order.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${d.colors[r]}"></span>${esc(NAMES[r])}</label>`).join("");
+  $("legend").innerHTML=`<label><input type="checkbox" data-r="NC"><span class="sw" style="background:repeating-linear-gradient(90deg,#0b6bcb 0 6px,transparent 6px 10px)"></span>Silver Lake NC outline (approximate)</label>`+order.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${d.colors[r]}"></span>${esc(NAMES[r])}</label>`).join("");
   $("legend").addEventListener("change",e=>{const r=e.target.dataset.r;e.target.checked?groups[r].addTo(map):map.removeLayer(groups[r])});
   const rows=[];
   d.stops.filter(s=>s.mode==="rail").sort((a,b)=>b.lat-a.lat).forEach(s=>{
     const cs=Object.entries(s.connections||{});
     if(!cs.length) rows.push(`<tr><td>${esc(s.name)}</td><td colspan="3">No stop of these routes within 1 km</td></tr>`);
-    cs.sort((a,b)=>a[1].m-b[1].m).forEach(([r,c],i)=>rows.push(`<tr><td>${i?"":esc(s.name)}</td><td><span class="chip" style="background:${d.colors[r]}">${esc(r)}</span></td><td>${esc(c.stop)}</td><td>${c.m<=150?"same corner ("+c.m+" m)":c.m+" m"}</td></tr>`));
+    cs.sort((a,b)=>a[1].m-b[1].m).forEach(([r,c],i)=>rows.push(`<tr><td>${i?"":esc(s.name)}</td><td><span class="chip" style="background:${d.colors[r]}">${esc(lab(r))}</span></td><td>${esc(c.stop)}</td><td>${c.m<=150?"same corner ("+c.m+" m)":c.m+" m"}</td></tr>`));
   });
   $("conn").innerHTML=rows.join("");
   const H=d.headways,fm=v=>v==null?"—":v,W=H.windows;
   $("hwsub").textContent=`Minutes between vehicles (headway), typical weekday (${H.date}). Peak ${W.peak}; midday ${W.midday}; off-peak ${W.offpeak}.`;
   let prev="";
-  $("hw").innerHTML=H.rows.slice().sort((a,b)=>order.indexOf(a.route)-order.indexOf(b.route)||a.direction.localeCompare(b.direction)).map(r=>{
+  $("hw").innerHTML=H.rows.filter(r=>r.route!=="D").sort((a,b)=>order.indexOf(a.route)-order.indexOf(b.route)||a.direction.localeCompare(b.direction)).map(r=>{
     const first=r.route!==prev;prev=r.route;
     const where=esc(r.stop)+(r.dist_to_nc_m>80?` <span class="sub">(${r.dist_to_nc_m} m from NC)</span>`:"");
-    return `<tr><td>${first?`<span class="chip" style="background:${d.colors[r.route]}">${esc(r.route)}</span>`:""}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td><td>${where}</td></tr>`}).join("");
+    return `<tr><td>${first?`<span class="chip" style="background:${d.colors[r.route]}">${esc(lab(r.route))}</span>`:""}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td><td>${where}</td></tr>`}).join("");
+  const C=d.corridor,COL={...d.colors,"E":"#fdb913","A":"#0072bc","C":"#58a738","K":"#e56db1"};
+  const map2=L.map("map2",{zoomSnap:0.25});
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map2);
+  map2.fitBounds([[C.view[1],C.view[0]],[C.view[3],C.view[2]]],{padding:[8,8]});
+  const ncLayer2=L.geoJSON(d.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.05}}).bindTooltip("Silver Lake NC (approximate)");
+  const NM={...NAMES,"E":"E Line (subway/light rail)"};
+  C.lines.forEach(l=>L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:COL[l.route],weight:l.ext?4:5,opacity:l.ext?.85:.95,dashArray:l.ext?"2 8":null,lineCap:"round"}).bindTooltip(NM[l.route]||l.route).addTo(map2));
+  C.transfers.forEach(t=>{
+    const m=L.circleMarker([t.lat,t.lon],{radius:8,color:"#fff",weight:2,fillColor:"#222",fillOpacity:1}).addTo(map2);
+    const left=/Pershing/.test(t.station);
+    m.bindTooltip(t.station.replace(/ Station.*/,""),{permanent:true,direction:left?"left":"right",offset:[left?-8:8,0],className:"stn"});
+    m.bindPopup(`<b>${esc(t.station)}</b><br>Rail: ${t.lines.join(", ")}`+(t.bus2?`<br>Bus 2: ${esc(t.bus2.stop)} (${t.bus2.m} m)`:"")+(t.bus4?`<br>Bus 4: ${esc(t.bus4.stop)} (${t.bus4.m} m)`:""));
+    ["bus2","bus4"].forEach(k=>{if(t[k])L.circleMarker([t[k].lat,t[k].lon],{radius:5,color:"#000",weight:1.5,fillColor:COL[k.slice(3)],fillOpacity:1}).addTo(map2).bindPopup(`<b>${esc(t[k].stop)}</b><br>${esc(NAMES[k.slice(3)])}`)});
+  });
+  (C.endpoints||[]).slice(0,1).forEach(e=>L.circleMarker([e.lat,e.lon],{radius:8,color:"#fff",weight:2,fillColor:"#222",fillOpacity:1}).addTo(map2).bindTooltip("Union Station (B, D end)",{permanent:true,direction:"top",offset:[0,-8],className:"stn"}));
+  $("clegend").innerHTML=`<label><input type="checkbox" id="nc2"><span class="sw" style="background:repeating-linear-gradient(90deg,#0b6bcb 0 6px,transparent 6px 10px)"></span>Silver Lake NC outline (approximate)</label>`+[["2","Bus 2"],["4","Bus 4"],["B","B Line"],["D","D Line"],["E","E Line"]].map(([r,n])=>`<span><span class="sw" style="background:${COL[r]}"></span>${n}</span>`).join("")+`<span>Solid = within the main map; dotted = continuation</span>`;
+  $("nc2").addEventListener("change",e=>e.target.checked?ncLayer2.addTo(map2):map2.removeLayer(ncLayer2));
+  const RL=r=>`<span class="chip" style="background:${COL[r]};color:${r==="E"?"#000":"#fff"}">${r}</span>`;
+  $("ctrans").innerHTML=C.transfers.slice().sort((a,b)=>(a.bus2?0:1)-(b.bus2?0:1)||b.lat-a.lat).map(t=>`<tr><td>${esc(t.station.replace(/ Station.*/,""))}</td><td>${t.lines.map(RL).join("")}</td><td>${t.bus2?esc(t.bus2.stop)+" · "+t.bus2.m+" m":"—"}</td><td>${t.bus4?esc(t.bus4.stop)+" · "+t.bus4.m+" m":"—"}</td></tr>`).join("");
+  const Wst=C.transfers.find(t=>/Westlake/.test(t.station));
+  if(Wst){
+    const b2=H.rows.filter(r=>r.route==="2"),dl=H.rows.filter(r=>r.route==="D");
+    $("csub").textContent=`Bus 2 runs down Alvarado St to Westlake/MacArthur Park Station, a B and D Line station. The nearest Bus 2 stop, ${Wst.bus2.stop}, is ${Wst.bus2.m} m (straight line) from it. Bus 2 runs about every ${Math.min(...b2.map(r=>r.peak))} min at peak; the D Line every ${dl[0]?dl[0].peak:"?"} min. Bus 4 continues through downtown and meets the B, D, A and E lines.`;
+    $("chw").innerHTML=dl.map(r=>`<tr><td>${RL("D")}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td></tr>`).join("");
+  }
+  $("cnote").textContent="Rail lines are dotted and drawn without station detail; only stations where Bus 2 or Bus 4 stops within 350 m are marked. B and D run to Union Station. The E Line does not stop at Union Station: it runs through 7th St/Metro Center, Historic Broadway and Little Tokyo/Arts District, so transfer to or from it downtown rather than at Union Station. Distances are straight-line from the schedule data; walking and the transfers themselves are not verified on the ground. D Line headways are at Westlake/MacArthur Park Station.";
   $("hwnote").textContent="Each figure is the median gap between consecutive departures at one reference stop per direction (the busiest stop at or nearest the NC), from the published schedule, not live arrivals. Route 10 includes route 48 trips. First/last times past midnight are shown on a 24-hour clock.";
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
 </script></main></body></html>

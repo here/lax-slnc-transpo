@@ -16,12 +16,24 @@ from collections import Counter, defaultdict
 
 from shapely import concave_hull
 from shapely.geometry import LineString, MultiPoint, Point, mapping
-from shapely.ops import unary_union
+from shapely.ops import substring, unary_union
 
-BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "93": "93-13201", "182": "182-13201", "296": "296-13201"}
-DASH_ROUTES = {"DASH": "4869"}   # LADOT DASH Pico Union/Echo Park (not in the Metro feed)
-BUS_COLORS = {"2": "#d95f02", "4": "#1b9e77", "10": "#7570b3", "92": "#e7298a", "93": "#a6761d", "182": "#66a61e", "296": "#444444", "DASH": "#e6ab02"}
+BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "93": "93-13201", "182": "182-13201", "296": "296-13201",
+              # nearby routes just outside the NC (drawn dashed on the page)
+              "14": "14-13201", "204": "204-13201", "754": "754-13201"}
+DASH_ROUTES = {"DASH": "4869", "DASH-LF": "4577"}   # LADOT DASH Pico Union/Echo Park (not in the Metro feed); DASH-LF = Observatory/Los Feliz
+BUS_COLORS = {"2": "#d95f02", "4": "#1b9e77", "10": "#7570b3", "92": "#e7298a", "93": "#a6761d", "182": "#66a61e", "296": "#444444", "DASH": "#e6ab02",
+              "14": "#8e44ad", "204": "#2c7fb8", "754": "#08306b", "DASH-LF": "#795548"}
 RAIL_ROUTE, RAIL_COLOR = "802", "#eb131b"  # B Line
+D_ROUTE, D_COLOR = "805", "#a05da5"        # D Line (shares Westlake/MacArthur Park with the B Line)
+# Corridor view: Bus 2 down Alvarado to the D Line at Westlake/MacArthur Park (south of the NC)
+CORRIDOR_VIEW = (-118.2985, 34.0440, -118.2300, 34.1130)   # minx, miny, maxx, maxy: out to Union Station
+CORRIDOR_ROUTES = {"2", "4", "B", "D", "E"}   # lines drawn on the corridor map
+RAIL_ALL = {"801": "A", "802": "B", "803": "C", "804": "E", "805": "D", "807": "K"}   # all Metro rail, for transfers
+NO_HEADWAY = {"A", "C", "E", "K"}   # rail lines not shown in the headway tables
+UNION_STATION = (-118.234249, 34.056197)   # B and D Lines end here; trim their shapes
+TRANSFER_M = 350   # bus stop within this of a rail station = transfer
+REF_STOP_NAME = {"D": "Westlake / MacArthur Park Station"}   # headway measured here, not nearest the NC
 GITLAB = "https://gitlab.com/LACMTA/{}/-/raw/master/{}"
 LADOT_GTFS = "https://ladotbus.com/gtfs"   # LADOT DASH feed; see their GTFS developer license
 OUT = os.path.join(os.path.dirname(__file__), "..", "site", "transit", "data", "transit.json")
@@ -137,10 +149,12 @@ def main():
     window = box(*view)
 
     lines, all_stops, hw_rows = [], {}, []
+    corr_lines, corr_stops = [], {}
+    win2 = box(*CORRIDOR_VIEW)
     day = service_date()
     feeds = [(bus, dict((rid, k) for k, rid in BUS_ROUTES.items()), "bus"),
              (dash, dict((rid, k) for k, rid in DASH_ROUTES.items()), "bus"),
-             (rail, {RAIL_ROUTE: "B"}, "rail")]
+             (rail, RAIL_ALL, "rail")]
     for d, wanted, mode in feeds:
         trips = defaultdict(Counter)   # route_id -> (shape_id, dir) -> n
         trip_route, trip_info = {}, {}
@@ -162,11 +176,35 @@ def main():
         for r in rows(os.path.join(d, "shapes.txt")):
             if r["shape_id"] in want_shapes:
                 shp[r["shape_id"]].append((int(r["shape_pt_sequence"]), float(r["shape_pt_lon"]), float(r["shape_pt_lat"])))
-        seen = set()
+        seen, seen2 = set(), set()
         for rid, sids in keep.items():
             label = wanted[rid]
             for sid in sorted(sids):
                 ls = LineString([(x, y) for _, x, y in sorted(shp[sid])])
+                if label in CORRIDOR_ROUTES:
+                    lsc = ls
+                    if label in ("B", "D") and ls.distance(Point(UNION_STATION)) < 0.0008:
+                        # the shape runs on into the rail yard: keep only the part up to Union Station
+                        cut = ls.project(Point(UNION_STATION))
+                        halves = [substring(ls, 0, cut), substring(ls, cut, ls.length)]
+                        halves = [h_ for h_ in halves if h_.geom_type == "LineString" and h_.length > 0]
+                        lsc = min(halves, key=lambda h_: h_.bounds[2])   # the half that heads west
+                    c2 = lsc.intersection(win2)
+                    for part in (c2.geoms if hasattr(c2, "geoms") else [c2]):
+                        if part.geom_type != "LineString" or part.length == 0:
+                            continue
+                        # the part inside the main map window is solid; the continuation beyond it is dotted
+                        for geom, ext in ((part.intersection(window), False), (part.difference(window), True)):
+                            for g in (geom.geoms if hasattr(geom, "geoms") else [geom]):
+                                if g.geom_type != "LineString" or g.length == 0:
+                                    continue
+                                cs2 = list(g.coords)
+                                k2 = (label, ext, tuple(sorted((round(cs2[0][0], 4), round(cs2[0][1], 4),
+                                                                round(cs2[-1][0], 4), round(cs2[-1][1], 4)))))
+                                if k2 not in seen2:
+                                    seen2.add(k2)
+                                    corr_lines.append({"route": label, "mode": mode, "ext": ext or mode == "rail",
+                                                       "coords": [[round(x, 5), round(y, 5)] for x, y in g.simplify(0.00003).coords]})
                 clipped = ls.intersection(window)
                 if clipped.is_empty:
                     continue
@@ -188,7 +226,7 @@ def main():
         trip_ids = set(trip_route)
         pos = {s["stop_id"]: (float(s["stop_lon"]), float(s["stop_lat"]), s["stop_name"])
                for s in rows(os.path.join(d, "stops.txt")) if s["stop_lat"]}
-        cand = {i for i, (x, y, _) in pos.items() if window.contains(Point(x, y))}
+        cand = {i for i, (x, y, _) in pos.items() if window.contains(Point(x, y)) or win2.contains(Point(x, y))}
         deps = defaultdict(list)       # (route_id, dir, stop_id) -> departure seconds on `day`
         last = {}                      # trip_id -> (stop_sequence, stop_id) of its final stop
         with open(os.path.join(d, "stop_times.txt"), newline="", encoding="utf-8-sig") as f:
@@ -215,8 +253,12 @@ def main():
             end = pos.get(last.get(tid, (0, ""))[1], (0, 0, ""))[2]
             heads[(ri, di)][h or (f"to {end}" if end else "")] += 1
         for (ri, di), cands in sorted(by_rd.items()):
-            near = [c for c in cands if c[0] <= 80] or [min(cands)]
+            rname = REF_STOP_NAME.get(wanted[ri])
+            named = [c for c in cands if pos[c[2]][2] == rname] if rname else []
+            near = named or [c for c in cands if c[0] <= 80] or [min(cands)]
             dist, negn, sid, v = min(near, key=lambda c: (c[1], c[0]))
+            if wanted[ri] in NO_HEADWAY:
+                continue
             hw = headways(v)
             hw_rows.append({"route": wanted[ri], "direction": heads[(ri, di)].most_common(1)[0][0] or f"Direction {di}",
                             "stop": pos[sid][2], "dist_to_nc_m": round(dist), "trips": len(v),
@@ -224,6 +266,11 @@ def main():
         for s in rows(os.path.join(d, "stops.txt")):
             if s["stop_id"] in stop_routes:
                 p = (float(s["stop_lon"]), float(s["stop_lat"]))
+                cr = sorted(stop_routes[s["stop_id"]]) if mode == "rail" else sorted(stop_routes[s["stop_id"]] & CORRIDOR_ROUTES)
+                if cr and win2.contains(Point(p)):
+                    corr_stops[(d, s["stop_id"])] = {"id": s["stop_id"], "name": s["stop_name"],
+                                                     "lon": round(p[0], 6), "lat": round(p[1], 6),
+                                                     "mode": mode, "routes": cr}
                 if window.contains(Point(p)):
                     all_stops[(d, s["stop_id"])] = {
                         "id": s["stop_id"], "name": s["stop_name"], "lon": round(p[0], 6), "lat": round(p[1], 6),
@@ -241,11 +288,36 @@ def main():
                     conn[r] = {"m": round(m), "stop": b["name"], "lon": b["lon"], "lat": b["lat"]}
         st["connections"] = dict(sorted(conn.items()))
 
+    # Transfers: rail stations (by name) with a Bus 2 or Bus 4 stop within TRANSFER_M
+    c_stops = list(corr_stops.values())
+    stations_c = {}
+    for st in c_stops:
+        if st["mode"] == "rail":
+            cur = stations_c.setdefault(st["name"], dict(st))
+            cur["routes"] = sorted(set(cur["routes"]) | set(st["routes"]))
+    transfers = []
+    for name, st in sorted(stations_c.items()):
+        t = {"station": name, "lon": st["lon"], "lat": st["lat"], "lines": st["routes"]}
+        for rte in ("2", "4"):
+            best = None
+            for b in (x for x in c_stops if x["mode"] == "bus" and rte in x["routes"]):
+                m = meters((st["lon"], st["lat"]), (b["lon"], b["lat"]))
+                if best is None or m < best["m"]:
+                    best = {"m": round(m), "stop": b["name"], "lon": b["lon"], "lat": b["lat"]}
+            if best and best["m"] <= TRANSFER_M:
+                t["bus" + rte] = best
+        if "bus2" in t or "bus4" in t:
+            transfers.append(t)
+    links = [t for t in transfers if "Westlake" in t["station"]]
+    corridor = {"view": list(CORRIDOR_VIEW), "lines": corr_lines, "stops": [x for x in c_stops if x["mode"] == "bus"],
+                "transfers": transfers,
+                "endpoints": [{"name": n, "lon": st["lon"], "lat": st["lat"]} for n, st in stations_c.items() if n.startswith("Union Station")]}
+
     out = {"generated": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(timespec="seconds"),
            "gtfs_source": "https://gitlab.com/LACMTA/gtfs_bus , https://gitlab.com/LACMTA/gtfs_rail",
            "boundary_note": f"Approximate outline: concave hull of {npts} unique 311 case locations tagged SILVER LAKE NC. Not the official boundary.",
-           "boundary": mapping(nc), "view": list(view), "colors": {**BUS_COLORS, "B": RAIL_COLOR},
-           "lines": lines, "stops": stops,
+           "boundary": mapping(nc), "view": list(view), "colors": {**BUS_COLORS, "B": RAIL_COLOR, "D": D_COLOR},
+           "lines": lines, "stops": stops, "corridor": corridor,
            "headways": {"date": day.isoformat(), "rows": hw_rows,
                         "windows": {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "before 6 AM and after 7 PM"}}}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -253,6 +325,8 @@ def main():
         json.dump(out, f, separators=(",", ":"))
     for h in hw_rows:
         print(f"  {h['route']:>5} {h['direction'][:22]:22} @{h['stop'][:28]:28} peak={h['peak']} mid={h['midday']} off={h['offpeak']} trips={h['trips']}", file=sys.stderr)
+    for t in transfers:
+        print(f"  transfer {t['station']} {t['lines']} bus2={t.get('bus2', {}).get('m')} bus4={t.get('bus4', {}).get('m')}", file=sys.stderr)
     print(f"lines={len(lines)} stops={len(stops)} stations={len(stations)} -> {OUT}", file=sys.stderr)
     for st in stations:
         print(f"  B Line: {st['name']}  " + ", ".join(f"{r}:{c['m']}m" for r, c in st["connections"].items()), file=sys.stderr)
