@@ -3,8 +3,8 @@
 <title>Sunset Blvd Transit</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9);--main:#1b1b1b}
-@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9);--main:#f2f2f2}}
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9);--main:#6b6b6b}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9);--main:#bdbdbd}}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
 main{max-width:1100px;margin:0 auto;padding:6px 16px 16px}
 h1{font-size:1.4rem;margin:6px 0 4px}h2{font-size:1.05rem;margin:22px 0 6px}
@@ -22,7 +22,8 @@ h1{font-size:1.4rem;margin:6px 0 4px}h2{font-size:1.05rem;margin:22px 0 6px}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .chip{display:inline-block;min-width:22px;text-align:center;padding:1px 7px;border-radius:10px;color:#fff;font-size:.85em;font-weight:600}
-.todo{border-left:3px solid #e6ab02;padding:4px 12px;margin:16px 0;background:rgba(230,171,2,.08)}
+.todo{border-left:3px solid #3949ab;padding:4px 12px;margin:16px 0;background:rgba(57,73,171,.07)}
+.stn.tram{border-color:#3949ab;color:#283593}
 </style></head><body><main>
 <h1>Sunset Blvd: Douglas St to Union Station</h1>
 <p class="sub" id="meta">Loading…</p>
@@ -38,7 +39,7 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 <div class="scroll"><table><thead><tr><th>Line</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Description</th></tr></thead><tbody id="hw"></tbody></table></div>
 <p class="sub">Median minutes between departures at one stop per direction, from the published weekday schedule, not live arrivals. Distances are straight-line between stops and are not checked on the ground.</p>
 
-<div class="todo"><b>To do:</b> add the tram line (the proposed aerial tram between Union Station and Dodger Stadium). Its route is not in the transit data used here yet.</div>
+<div class="todo"><b>Aerial tram (proposed):</b> the LA ART gondola from Union Station to Dodger Stadium, with a station at Los Angeles State Historic Park by the A Line's Chinatown station. It is drawn from its published route description (along Alameda St, the edge of the park and the A Line tracks, then up Bishops Rd and across the 110 near Stadium Way), not from engineering drawings: station positions are approximate and the dotted stretch past Bishops Rd is a guess at the path. Status: proposed; Metro's board approved its environmental report with conditions in February 2024. Source: <a href="https://en.wikipedia.org/wiki/Los_Angeles_Aerial_Rapid_Transit">Wikipedia, Los Angeles Aerial Rapid Transit</a>.</div>
 
 <p class="sub">Transit: LA Metro schedule data (bus and rail). Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a>. Basemap, when on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. The Dodger Stadium label marks its location; the stadium outline is not drawn (turn on the basemap to see it).</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -52,7 +53,7 @@ map.createPane("ref").style.zIndex=380;
 const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors",opacity:.5});
 fetch("data/sunset.json").then(r=>r.json()).then(d=>{
   const C={...d.colors,"4":css("--main")},groups={},fm=v=>v==null?"—":v;
-  const chip=r=>`<span class="chip" style="background:${C[r]};color:${r==="4"&&css("--main")!=="#1b1b1b"?"#111":(r==="E"?"#000":"#fff")}">${esc(r)}</span>`;
+  const chip=r=>`<span class="chip" style="background:${C[r]};color:${r==="4"&&css("--main")==="#bdbdbd"?"#111":(r==="E"?"#000":"#fff")}">${esc(r)}</span>`;
   map.fitBounds([[d.view[1],d.view[0]],[d.view[3],d.view[2]]],{padding:[6,6]});
   // reference streets
   const ref=L.layerGroup().addTo(map);groups.__ref=ref;
@@ -71,6 +72,16 @@ fetch("data/sunset.json").then(r=>r.json()).then(d=>{
   d.lines.filter(l=>l.mode==="bus"&&l.route!=="4").forEach(l=>L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:C[l.route],weight:4,opacity:.9,lineCap:"round"}).bindTooltip("Bus "+l.route).addTo(groups[l.route]));
   d.lines.filter(l=>l.route==="4").forEach(l=>L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:C["4"],weight:6.5,opacity:.95,lineCap:"round"}).bindTooltip("Bus 4").addTo(groups["4"]));
   d.bus4_stops.forEach(s=>L.circleMarker([s.lat,s.lon],{radius:3.5,color:css("--canvas"),weight:1.5,fillColor:C["4"],fillOpacity:1}).bindPopup(`<b>${esc(s.name)}</b><br>Bus 4`).addTo(groups["4"]));
+  // proposed aerial tram (LA ART): dashed; the stretch past Bishops Rd is approximate (dotted, lighter)
+  if(d.tram){
+    const T="#3949ab",tg=L.layerGroup().addTo(map);groups.__tram=tg;
+    const cs=d.tram.coords.map(c=>[c[1],c[0]]),ax=d.tram.approx_from;
+    let k=cs.length-1;if(ax){let best=1e9;cs.forEach((c,i)=>{const dd=Math.hypot(c[0]-ax[1],c[1]-ax[0]);if(dd<best){best=dd;k=i}});}
+    L.polyline(cs.slice(0,k+1),{color:T,weight:4,dashArray:"9 6",opacity:.95}).bindTooltip(d.tram.name).addTo(tg);
+    L.polyline(cs.slice(k),{color:T,weight:3,dashArray:"2 6",opacity:.6}).bindTooltip(d.tram.name+": approximate past Bishops Rd").addTo(tg);
+    d.tram.stations.forEach((s,i)=>{const m=L.circleMarker([s.lat,s.lon],{radius:6,color:T,weight:3,fillColor:"#fff",fillOpacity:1}).addTo(tg).bindPopup(`<b>${esc(s.name)}</b><br>Proposed tram station (approximate location)`);
+      if(i<2)m.bindTooltip(`Tram: ${esc(s.name)}`,{permanent:true,direction:"left",offset:[-8,0],className:"stn tram"});});
+  }
   // transfer points and stations
   const xf=L.layerGroup().addTo(map);groups.__xf=xf;
   d.transfers.forEach(t=>L.circleMarker([t.lat,t.lon],{radius:7,color:"#fff",weight:2.5,fillColor:C[t.route],fillOpacity:1}).addTo(xf)
@@ -85,7 +96,7 @@ fetch("data/sunset.json").then(r=>r.json()).then(d=>{
     `<label><input type="checkbox" data-r="4" checked><span class="sw" style="background:${C["4"]};height:8px"></span>Bus 4 (on Sunset)</label>`+
     buses.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${C[r]}"></span>Bus ${esc(r)}</label>`).join("")+
     rails.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:repeating-linear-gradient(90deg,${C[r]} 0 4px,transparent 4px 8px)"></span>${r} Line</label>`).join("")+
-    box("__st",1,"#333")+box("__xf",1,"#999");
+    box("__st",1,"#333")+box("__xf",1,"#999")+(d.tram?`<label><input type="checkbox" data-r="__tram" checked><span class="sw" style="background:repeating-linear-gradient(90deg,#3949ab 0 7px,transparent 7px 11px)"></span>Aerial tram (proposed)</label>`:"");
   $("legend").addEventListener("change",e=>{const g=groups[e.target.dataset.r];if(g)e.target.checked?g.addTo(map):map.removeLayer(g)});
   $("meta").textContent=`Bus 4 runs along Sunset Blvd and Cesar E Chavez Ave here. Shown with it: the five busiest bus lines that cross or join it on this stretch (${buses.join(", ")}), and the A, B, D and E rail lines.`;
   $("pick").textContent=`Lines picked by weekday trips (${d.date}) among all lines that touch Bus 4 between Douglas St and Union Station. Next busiest: ${d.runners_up.map(r=>`${r.route} (${r.trips})`).join(", ")}.`;

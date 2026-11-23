@@ -11,4 +11,4 @@ Pages: `/` SLNC data (last 30 days of 311 in five chosen types, transit map imag
 
 ## To do
 
-- Add the tram line to the Sunset Blvd map: the proposed aerial tram between Union Station and Dodger Stadium. Its route is not in the GTFS feeds used here, so it needs another source.
+- Replace the approximate aerial tram (LA ART) on the Sunset Blvd map with its official alignment and station locations when a source is available (now traced from the published route description; see `build_sunset.py`).

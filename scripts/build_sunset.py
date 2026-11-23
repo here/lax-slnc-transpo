@@ -26,6 +26,10 @@ PINNED = None           # e.g. ["60-13201", ...] to fix the list instead of rank
 RAIL = {"801": "A", "802": "B", "804": "E", "805": "D"}
 UNION_STATION = (-118.234249, 34.056197)
 DODGER_STADIUM = (-118.2400, 34.0738)   # label position only (stadium outline not drawn)
+# Proposed LA ART aerial tram (gondola), drawn from its published route description (Wikipedia, "Route"):
+# from Union Station along Alameda St, along the edge of Los Angeles State Historic Park with a station by the
+# A Line's Chinatown station, along the A Line tracks to an angle point, up Bishops Rd, across the 110 near
+# Stadium Way to the stadium. Station positions and the last stretch are approximate.
 COLORS = ["#d95f02", "#1b9e77", "#7570b3", "#e7298a", "#66a61e"]
 RAIL_COLORS = {"A": "#0072bc", "B": "#eb131b", "D": "#a05da5", "E": "#fdb913"}
 STREETS = {
@@ -216,6 +220,41 @@ def main():
     for st in stations.values():
         st["lines"] = sorted(st["lines"])
 
+    # ---- proposed tram
+    tram = None
+    try:
+        from shapely.geometry import MultiPoint
+        def merged(pat):
+            g = linemerge(MultiLineString(roads(pat, VIEW)))
+            return g if g.geom_type == "LineString" else max(g.geoms, key=lambda x: x.length)
+        def piece(line, a, b):
+            da, db = line.project(a), line.project(b)
+            seg = substring(line, min(da, db), max(da, db))
+            cs = list(seg.coords)
+            return cs if da <= db else cs[::-1]
+        alameda, bishops = merged("LA_LA_N ALAMEDA ST_P"), merged("%BISHOPS RD%")
+        a_shape = rshapes["801"].most_common(1)[0][0]
+        aline = LineString([(x, y) for _, x, y in sorted(rpts[a_shape])])
+        china = next(Point(v[:2]) for v in rpos.values() if v[2] == "Chinatown Station")
+        us_pt = alameda.interpolate(alameda.project(Point(UNION_STATION)))
+        park_pt = alameda.interpolate(alameda.project(china))
+        b_ends = [Point(bishops.coords[0]), Point(bishops.coords[-1])]
+        b_east, b_west = sorted(b_ends, key=lambda p: aline.distance(p))
+        angle_pt = aline.interpolate(aline.project(b_east))
+        cross = merged("LA_LA_STADIUM WAY_P").intersection(merged("SHS_110._P"))
+        cross = cross if cross.geom_type == "Point" else (cross.centroid if not cross.is_empty else None)
+        coords = piece(alameda, us_pt, park_pt) + piece(aline, aline.interpolate(aline.project(park_pt)), angle_pt) \
+            + piece(bishops, b_east, b_west) + ([cross.coords[0]] if cross else []) + [DODGER_STADIUM]
+        tram = {"name": "LA ART aerial tram (proposed)",
+                "coords": [[round(x, 5), round(y, 5)] for x, y in LineString(coords).simplify(0.00002).coords],
+                "stations": [{"name": "Union Station (Alameda St)", "lon": round(us_pt.x, 5), "lat": round(us_pt.y, 5)},
+                             {"name": "Chinatown / State Park", "lon": round(park_pt.x, 5), "lat": round(park_pt.y, 5)},
+                             {"name": "Dodger Stadium", "lon": DODGER_STADIUM[0], "lat": DODGER_STADIUM[1]}],
+                "approx_from": [round(b_west.x, 5), round(b_west.y, 5)]}
+        print(f"tram: {len(tram['coords'])} points, {round(LineString(coords).length * 1e5)} m; 110 crossing {cross}", file=sys.stderr)
+    except Exception as e:   # the tram is an extra; never fail the build over it
+        print(f"tram not built: {e!r}", file=sys.stderr)
+
     out = {"generated": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(timespec="seconds"),
            "view": list(VIEW), "date": day.isoformat(), "colors": colors,
            "corridor": [[round(x, 5), round(y, 5)] for g in parts(corr) for x, y in g.coords],
@@ -224,6 +263,7 @@ def main():
            "stations": list(stations.values()), "transfers": transfers, "headways": hw_rows,
            "chosen": [label[r] for r in chosen],
            "runners_up": [{"route": rname[r][0], "trips": ntrips[r]} for r in ranked[N_CROSSING:N_CROSSING + 5]],
+           "tram": tram,
            "stadium": {"name": "Dodger Stadium", "lon": DODGER_STADIUM[0], "lat": DODGER_STADIUM[1]},
            "windows": {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "before 6 AM and after 7 PM"}}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
