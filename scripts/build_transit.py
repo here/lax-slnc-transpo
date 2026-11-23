@@ -37,11 +37,12 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "site", "transit", "data", "
 MARGIN_DEG = 0.010        # ~1 km of context around the NC outline (shows the Echo Park DASH)
 # Headways: measured on one typical weekday (override with HEADWAY_DATE=YYYY-MM-DD).
 # Windows are hours of the service day. Peak = AM + PM; off-peak = early morning + evening/night.
-# Hours >= 24 are after midnight on the same service day (GTFS times run past 24:00), so 2-5 AM is both 2-5 and 26-29.
+# Hours >= 24 are after midnight on the same service day (GTFS times run past 24:00), so 12-4 AM is both 0-4 and 24-28.
+# Overnight matches the "Owl" period (midnight to 4 AM) used on aviary.herebox.org's tables.
 WINDOWS = {"peak": [(6, 9), (15, 19)], "midday": [(9, 15)],
-           "offpeak": [(0, 2), (5, 6), (19, 26), (29, 30)], "overnight": [(2, 5), (26, 29)]}
-WINDOW_TEXT = {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "5-6 AM and 7 PM-2 AM",
-               "overnight": "2-5 AM"}
+           "offpeak": [(4, 6), (19, 24)], "overnight": [(0, 4), (24, 28)]}
+WINDOW_TEXT = {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "4-6 AM and 7 PM-midnight",
+               "overnight": "midnight-4 AM"}
 MAX_WALK_M = 1000         # list nearest stop of each route within this walk of a B Line station
 
 
@@ -136,9 +137,9 @@ def hhmm(sec):
 
 def headways(deps):
     """Median minutes between consecutive departures inside each window, per category.
-    Overnight (2-5 AM) only counts as service when departures cover the whole window: no stretch of more than an
-    hour without one, counting from 2:00 and to 5:00. Otherwise it is None, with overnight_from / overnight_until
-    giving the first or last departure in the window (e.g. trains that start at 4:24)."""
+    Overnight (midnight-4 AM) only counts as service when departures cover the whole window: no stretch of more than an
+    hour without one, counting from 0:00 and to 4:00. Otherwise it is None, with overnight_from / overnight_until
+    giving the first or last departure in the window (e.g. buses that stop at 1:05)."""
     deps = sorted(deps)
     out = {}
     for cat, spans in WINDOWS.items():

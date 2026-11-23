@@ -27,24 +27,32 @@ window.HW = (function () {
     return fmtHour(Math.ceil(firstOn / 60) % 24) + "–" + fmtHour(Math.floor(lastOn / 60));
   }
 
-  // "8" when both directions agree, "22–26" when they differ, "—" when there is no service in that window.
+  // One number per window: the two directions' average, rounded, when they differ by 5 minutes or less
+  // (7 and 8 -> 8); the range only for outliers that differ by more (evening 22 and 39 -> "22–39").
+  // "—" when there is no service in that window.
   function range(vals) {
     const v = vals.filter(x => x != null);
     if (!v.length) return "—";
     const lo = Math.min(...v), hi = Math.max(...v);
-    return lo === hi ? String(lo) : `${lo}–${hi}`;
+    if (hi - lo <= 5) return String(Math.round(v.reduce((a, b) => a + b, 0) / v.length));
+    return `${lo}–${hi}`;
   }
 
-  // Overnight (2-5 AM): a number only where departures cover the whole window. "58 (one way)" when only one
-  // direction does; "from 4:24" / "until 3:18" when service starts or stops inside the window; "—" when none.
+  // Values set by hand where the schedule is irregular. Line 10 peak: gaps of 12-15 minutes (average about 13.5);
+  // shown as 15, its typical scheduled gap (owner's choice, 2026-11-23).
+  const OVERRIDES = { "10": { peak: "15" } };
+
+  // Overnight (midnight-4 AM): a number only where departures cover the whole window. "58 (one way)" when only one
+  // direction does; "until 1:05" / "from 3:40" when service stops or starts inside the window; "—" when none.
   function night(rs) {
     const nums = rs.map(r => r.overnight).filter(x => x != null);
     if (nums.length) return range(nums) + (nums.length < rs.length ? " (one way)" : "");
     const toM = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
     const from = rs.map(r => r.overnight_from).filter(Boolean).sort((a, b) => toM(a) - toM(b));
-    if (from.length) return "from " + from[0];
+    const clock = t => { const [h, m] = t.split(":").map(Number); return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")}${h < 12 ? "am" : "pm"}`; };
+    if (from.length) return "from " + clock(from[0]);
     const until = rs.map(r => r.overnight_until).filter(Boolean).sort((a, b) => toM(b) - toM(a));
-    if (until.length) return "until " + until[0];
+    if (until.length) return "until " + clock(until[0]);
     return "—";
   }
 
@@ -55,8 +63,8 @@ window.HW = (function () {
     if (order) keys.sort((a, b) => order.indexOf(a) - order.indexOf(b));
     return keys.map(route => {
       const rs = by.get(route);
-      return { route, peak: range(rs.map(r => r.peak)), midday: range(rs.map(r => r.midday)),
-               offpeak: range(rs.map(r => r.offpeak)), overnight: night(rs), hours: hours(rs) };
+      return Object.assign({ route, peak: range(rs.map(r => r.peak)), midday: range(rs.map(r => r.midday)),
+               offpeak: range(rs.map(r => r.offpeak)), overnight: night(rs), hours: hours(rs) }, OVERRIDES[route] || {});
     });
   }
   return { combine, hours, range, night };
