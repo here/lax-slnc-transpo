@@ -39,15 +39,18 @@ h1{font-size:1.5rem;margin:6px 0 4px}h2{font-size:1.1rem;margin:26px 0 4px}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const COLORS=["#d95f02","#1b9e77","#7570b3","#e7298a","#66a61e"];
+// The five request types shown here, chosen by the council (not computed): three of the most common street-condition
+// types plus park repairs and streetlights. "Information-Only" and "Service Not Complete" are left off on purpose.
+const TYPES=["Item Pickups","Illegal Dumping Item Pickup","Graffiti Removal","Park Amenity and Facilities Repair","Streetlight Repair Services"];
 const map=L.map("map",{zoomSnap:0.25}).setView([34.09,-118.27],14);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map);
 fetch("data/cases.json").then(r=>r.json()).then(d=>{
   const end=new Date(d.generated),start=new Date(end-30*864e5);
   const recent=d.cases.filter(c=>new Date(c.created+"Z")>=start);   // created times are local, close enough for a 30-day cut
   const counts={};recent.forEach(c=>counts[c.type]=(counts[c.type]||0)+1);
-  const top=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const top=TYPES.map(t=>[t,counts[t]||0]).sort((a,b)=>b[1]-a[1]);
   const shown=top.reduce((s,[,n])=>s+n,0);
-  $("meta").textContent=`${shown.toLocaleString()} of ${recent.length.toLocaleString()} requests from ${start.toISOString().slice(0,10)} to ${end.toISOString().slice(0,10)} fall in the five most common types. Updated ${d.generated.slice(0,16).replace("T"," ")} UTC.`;
+  $("meta").textContent=`${shown.toLocaleString()} of ${recent.length.toLocaleString()} requests from ${start.toISOString().slice(0,10)} to ${end.toISOString().slice(0,10)} are in these five types. Updated ${d.generated.slice(0,16).replace("T"," ")} UTC.`;
   const groups={},pts=[];
   top.forEach(([type],i)=>{
     const g=L.layerGroup().addTo(map);groups[type]=g;
