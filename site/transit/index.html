@@ -31,7 +31,7 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 <h2>How often they run</h2>
 <p class="sub" id="hwsub">Minutes between vehicles (headway) on a typical weekday.</p>
-<div class="scroll"><table><thead><tr><th>Route</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Measured at</th></tr></thead><tbody id="hw"></tbody></table></div>
+<div class="scroll"><table><thead><tr><th>Route</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Description</th></tr></thead><tbody id="hw"></tbody></table></div>
 <p class="sub" id="hwnote"></p>
 
 <h2>Bus 2 and Bus 4 to rail</h2>
@@ -50,6 +50,7 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 <p class="sub">Map: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Routes and stops: LA Metro GTFS (<a href="https://gitlab.com/LACMTA/gtfs_bus">bus</a>, <a href="https://gitlab.com/LACMTA/gtfs_rail">rail</a>) and LADOT DASH GTFS (<a href="https://ladotbus.com/gtfs">ladotbus.com/gtfs</a>). Thick lines are inside the NC; thin lines are the same route outside it (turn on the NC outline in the legend to see the edge). The dashed routes and the Echo Park DASH stay outside the NC; the Echo Park DASH runs about 700&nbsp;m southeast along Echo Park Ave.</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="../route-themes.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -96,7 +97,7 @@ fetch("data/transit.json").then(r=>r.json()).then(d=>{
   let prev="";
   $("hw").innerHTML=H.rows.filter(r=>r.route!=="D").sort((a,b)=>order.indexOf(a.route)-order.indexOf(b.route)||a.direction.localeCompare(b.direction)).map(r=>{
     const first=r.route!==prev;prev=r.route;
-    const where=esc(r.stop)+(r.dist_to_nc_m>80?` <span class="sub">(${r.dist_to_nc_m} m from NC)</span>`:"");
+    const where=first?esc((window.ROUTE_THEMES||{})[r.route]||""):"";
     return `<tr><td>${first?`<span class="chip" style="background:${d.colors[r.route]}">${esc(lab(r.route))}</span>`:""}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td><td>${where}</td></tr>`}).join("");
   const C=d.corridor,COL={...d.colors,"E":"#fdb913","A":"#0072bc","C":"#58a738","K":"#e56db1"};
   const map2=L.map("map2",{zoomSnap:0.25});
