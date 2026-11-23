@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sunset Blvd Transit</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9);--main:#1b1b1b}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9);--main:#f2f2f2}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:6px 16px 16px}
+h1{font-size:1.4rem;margin:6px 0 4px}h2{font-size:1.05rem;margin:22px 0 6px}
+.sub{color:var(--mut);margin:0 0 10px}a{color:var(--acc)}
+#map{height:720px;border:1px solid var(--line);border-radius:6px;margin:12px 0;background:var(--canvas)}
+@media(max-width:700px){#map{height:72vh}}
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin:8px 0}
+.legend label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sw{display:inline-block;width:26px;height:6px;border-radius:3px}
+.slbl{background:none;border:0;box-shadow:none;color:var(--lbl);font-size:11px;font-weight:500;padding:0;text-shadow:0 0 3px var(--halo),0 0 3px var(--halo),0 0 3px var(--halo)}
+.slbl:before,.stn:before,.stad:before{display:none}
+.stn{background:#fff;color:#111;border:2px solid #555;font-weight:700;font-size:11px;box-shadow:none;padding:1px 5px}
+.stad{background:none;border:0;box-shadow:none;color:#2e7d32;font-weight:700;font-size:12px;text-shadow:0 0 3px var(--halo),0 0 3px var(--halo)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-block;min-width:22px;text-align:center;padding:1px 7px;border-radius:10px;color:#fff;font-size:.85em;font-weight:600}
+.todo{border-left:3px solid #e6ab02;padding:4px 12px;margin:16px 0;background:rgba(230,171,2,.08)}
+</style></head><body><main>
+<h1>Sunset Blvd: Douglas St to Union Station</h1>
+<p class="sub" id="meta">Loading…</p>
+<div class="legend" id="legend"></div>
+<div id="map"></div>
+<p class="sub" id="pick"></p>
+
+<h2>Where they meet Bus 4</h2>
+<div class="scroll"><table><thead><tr><th>Line</th><th>Route</th><th class="n">Weekday trips</th><th>Line's stop</th><th>Nearest Bus 4 stop</th><th class="n">Apart</th></tr></thead><tbody id="xfer"></tbody></table></div>
+
+<h2>How often they run</h2>
+<p class="sub" id="hwsub"></p>
+<div class="scroll"><table><thead><tr><th>Line</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Measured at</th></tr></thead><tbody id="hw"></tbody></table></div>
+<p class="sub">Median minutes between departures at one stop per direction, from the published weekday schedule, not live arrivals. Distances are straight-line between stops and are not checked on the ground.</p>
+
+<div class="todo"><b>To do:</b> add the tram line (the proposed aerial tram between Union Station and Dodger Stadium). Its route is not in the transit data used here yet.</div>
+
+<p class="sub">Transit: LA Metro schedule data (bus and rail). Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a>. Basemap, when on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. The Dodger Stadium label marks its location; the stadium outline is not drawn (turn on the basemap to see it).</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const map=L.map("map",{zoomSnap:0.25});
+map.createPane("ref").style.zIndex=380;
+const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors",opacity:.5});
+fetch("data/sunset.json").then(r=>r.json()).then(d=>{
+  const C={...d.colors,"4":css("--main")},groups={},fm=v=>v==null?"—":v;
+  const chip=r=>`<span class="chip" style="background:${C[r]};color:${r==="4"&&css("--main")!=="#1b1b1b"?"#111":(r==="E"?"#000":"#fff")}">${esc(r)}</span>`;
+  map.fitBounds([[d.view[1],d.view[0]],[d.view[3],d.view[2]]],{padding:[6,6]});
+  // reference streets
+  const ref=L.layerGroup().addTo(map);groups.__ref=ref;
+  Object.entries(d.streets).forEach(([n,lines])=>{
+    const fwy=/^(US|I)-/.test(n);
+    lines.forEach(c=>L.polyline(c.map(p=>[p[1],p[0]]),{pane:"ref",color:css(fwy?"--fwy":"--st"),weight:fwy?3:1.6,opacity:.9,interactive:false}).addTo(ref));
+    const m=d.labels[n];
+    if(m)L.circleMarker([m[1],m[0]],{pane:"ref",radius:.5,opacity:0,fillOpacity:0,interactive:false}).addTo(ref).bindTooltip(n,{permanent:true,direction:"center",className:"slbl"});
+  });
+  L.circleMarker([d.stadium.lat,d.stadium.lon],{pane:"ref",radius:.5,opacity:0,fillOpacity:0,interactive:false}).addTo(ref)
+    .bindTooltip("Dodger Stadium &#9918;",{permanent:true,direction:"center",className:"stad"});
+  // rail (dotted), then buses; Bus 4 on top
+  const rails=["A","B","D","E"],buses=d.chosen;
+  [...rails,...buses,"4"].forEach(r=>groups[r]=L.layerGroup().addTo(map));
+  d.lines.filter(l=>l.mode==="rail").forEach(l=>L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:C[l.route],weight:4,opacity:.85,dashArray:"2 8",lineCap:"round"}).bindTooltip(l.route+" Line").addTo(groups[l.route]));
+  d.lines.filter(l=>l.mode==="bus"&&l.route!=="4").forEach(l=>L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:C[l.route],weight:4,opacity:.9,lineCap:"round"}).bindTooltip("Bus "+l.route).addTo(groups[l.route]));
+  d.lines.filter(l=>l.route==="4").forEach(l=>L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:C["4"],weight:6.5,opacity:.95,lineCap:"round"}).bindTooltip("Bus 4").addTo(groups["4"]));
+  d.bus4_stops.forEach(s=>L.circleMarker([s.lat,s.lon],{radius:3.5,color:css("--canvas"),weight:1.5,fillColor:C["4"],fillOpacity:1}).bindPopup(`<b>${esc(s.name)}</b><br>Bus 4`).addTo(groups["4"]));
+  // transfer points and stations
+  const xf=L.layerGroup().addTo(map);groups.__xf=xf;
+  d.transfers.forEach(t=>L.circleMarker([t.lat,t.lon],{radius:7,color:"#fff",weight:2.5,fillColor:C[t.route],fillOpacity:1}).addTo(xf)
+    .bindPopup(`<b>Bus ${esc(t.route)} ↔ Bus 4</b><br>${esc(t.stop)} to ${esc(t.bus4_stop)}: ${t.m} m`));
+  const st=L.layerGroup().addTo(map);groups.__st=st;
+  d.stations.forEach(s=>L.circleMarker([s.lat,s.lon],{radius:7,color:"#fff",weight:2,fillColor:"#333",fillOpacity:1}).addTo(st)
+    .bindTooltip(`${esc(s.name)} (${s.lines.join(", ")})`,{permanent:true,direction:/Grand Ave/.test(s.name)?"left":"right",offset:[/Grand Ave/.test(s.name)?-8:8,0],className:"stn"}));
+  groups.__osm=tiles;
+  const lab={"__ref":"Reference streets","__osm":"OpenStreetMap basemap","__xf":"Transfer points","__st":"Rail stations"};
+  const box=(k,on,sw)=>`<label><input type="checkbox" data-r="${k}"${on?" checked":""}><span class="sw" style="background:${sw}"></span>${esc(lab[k]||k)}</label>`;
+  $("legend").innerHTML=box("__ref",1,"#a9a9a9")+box("__osm",0,"#aab")+
+    `<label><input type="checkbox" data-r="4" checked><span class="sw" style="background:${C["4"]};height:8px"></span>Bus 4 (on Sunset)</label>`+
+    buses.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${C[r]}"></span>Bus ${esc(r)}</label>`).join("")+
+    rails.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:repeating-linear-gradient(90deg,${C[r]} 0 4px,transparent 4px 8px)"></span>${r} Line</label>`).join("")+
+    box("__st",1,"#333")+box("__xf",1,"#999");
+  $("legend").addEventListener("change",e=>{const g=groups[e.target.dataset.r];if(g)e.target.checked?g.addTo(map):map.removeLayer(g)});
+  $("meta").textContent=`Bus 4 runs along Sunset Blvd and Cesar E Chavez Ave here. Shown with it: the five busiest bus lines that cross or join it on this stretch (${buses.join(", ")}), and the A, B, D and E rail lines.`;
+  $("pick").textContent=`Lines picked by weekday trips (${d.date}) among all lines that touch Bus 4 between Douglas St and Union Station. Next busiest: ${d.runners_up.map(r=>`${r.route} (${r.trips})`).join(", ")}.`;
+  $("xfer").innerHTML=d.transfers.map(t=>`<tr><td>${chip(t.route)}</td><td>${esc(t.desc)}</td><td class="n">${t.trips}</td><td>${esc(t.stop)}</td><td>${esc(t.bus4_stop)}</td><td class="n">${t.m<=60?"same corner":t.m+" m"}</td></tr>`).join("");
+  const W=d.windows;$("hwsub").textContent=`Minutes between buses, weekday ${d.date}. Peak ${W.peak}; midday ${W.midday}; off-peak ${W.offpeak}.`;
+  let prev="";
+  $("hw").innerHTML=d.headways.map(r=>{const f=r.route!==prev;prev=r.route;
+    return `<tr><td>${f?chip(r.route):""}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td><td>${esc(r.stop)}</td></tr>`}).join("");
+  window.__ready=true;
+}).catch(e=>$("meta").textContent="Failed to load data: "+e);
+</script>
+<script src="../nav.js" data-root="../" data-page="sunset"></script>
+</main></body></html>

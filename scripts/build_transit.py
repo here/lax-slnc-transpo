@@ -78,13 +78,18 @@ def boundary():
     return hull, len(pts)
 
 
-def service_date():
+def service_date(feeds=()):
+    """A typical Wednesday to measure headways on: the first one at least 10 days out (avoids holiday weeks) on which
+    every feed in `feeds` has service; earlier Wednesdays are the fallback when a feed's calendar ends sooner."""
     if os.environ.get("HEADWAY_DATE"):
         return dt.date.fromisoformat(os.environ["HEADWAY_DATE"])
-    d = dt.date.today() + dt.timedelta(days=10)
-    while d.weekday() != 2:      # first Wednesday at least 10 days out (avoids holiday weeks)
-        d += dt.timedelta(days=1)
-    return d
+    today = dt.date.today()
+    weds = [today + dt.timedelta(days=k) for k in range(70) if (today + dt.timedelta(days=k)).weekday() == 2]
+    soon = today + dt.timedelta(days=10)
+    for d in [w for w in weds if w >= soon] + [w for w in reversed(weds) if w < soon]:
+        if all(active_services(f, d) for f in feeds):
+            return d
+    return weds[0]
 
 
 def active_services(feed_dir, day):
@@ -151,7 +156,7 @@ def main():
     lines, all_stops, hw_rows = [], {}, []
     corr_lines, corr_stops = [], {}
     win2 = box(*CORRIDOR_VIEW)
-    day = service_date()
+    day = service_date((bus, rail, dash))
     feeds = [(bus, dict((rid, k) for k, rid in BUS_ROUTES.items()), "bus"),
              (dash, dict((rid, k) for k, rid in DASH_ROUTES.items()), "bus"),
              (rail, RAIL_ALL, "rail")]

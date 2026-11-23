@@ -4,7 +4,7 @@
 // Links are relative, so the site works at its GitHub Pages address and under aviary.herebox.org/slnc/.
 (function () {
   const me = document.currentScript, root = me.dataset.root || "./", page = me.dataset.page || "";
-  const items = [["home", "", "SLNC data"], ["311", "311/", "311 data"], ["transit", "transit/", "Transit & walking"]];
+  const items = [["home", "", "SLNC data"], ["311", "311/", "311 data"], ["transit", "transit/", "Transit & walking"], ["sunset", "sunset/", "Sunset Blvd"]];
   const style = document.createElement("style");
   style.textContent = `
 .sitenav{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:10px 0;margin:0 0 14px;border-bottom:1px solid var(--line,#ddd)}
