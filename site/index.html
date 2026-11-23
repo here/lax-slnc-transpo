@@ -1,62 +1,67 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Silver Lake 311 Transportation Dashboard</title>
+<title>SLNC Data</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb}
 @media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff}}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:16px}
-h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
-#map{height:420px;border:1px solid var(--line);border-radius:6px;margin:12px 0}
-.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}
-.bar label{display:flex;gap:6px;align-items:center}
-select,input[type=search]{padding:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px}
-@media(max-width:800px){.grid{grid-template-columns:1fr}}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
-td.n{text-align:right;font-variant-numeric:tabular-nums}
-.scroll{max-height:460px;overflow:auto}a{color:var(--acc)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:6px 16px 16px}
+h1{font-size:1.5rem;margin:6px 0 4px}h2{font-size:1.1rem;margin:26px 0 4px}
+.lead{font-size:1.05rem;margin:0 0 8px}.sub{color:var(--mut);margin:0 0 10px}a{color:var(--acc)}
+#map{height:440px;border:1px solid var(--line);border-radius:6px;margin:10px 0 8px}
+@media(max-width:700px){#map{height:60vh}}
+.toggles{display:flex;flex-wrap:wrap;gap:8px 18px;margin:8px 0}
+.toggles label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.n{color:var(--mut);font-variant-numeric:tabular-nums}
+.more{font-weight:600;margin:6px 0 0}
+.fig{display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:10px 0 8px}
+.fig img{display:block;width:100%;height:auto}
 </style></head><body><main>
-<h1>Silver Lake Neighborhood Council — 311 Requests</h1>
+<h1>SLNC data</h1>
+<p class="lead">Data supporting Silver Lake Neighborhood Council.</p>
+
+<h2>311 requests, last 30 days</h2>
 <p class="sub" id="meta">Loading…</p>
-<p class="sub"><a href="streets/">Transit over key streets (lighter example map) &rarr;</a></p>
-<p class="sub"><a href="transit/">Transit map: bus 2, 4, 10, 92, 93, 182, 296, Echo Park DASH, nearby routes and the B Line &rarr;</a></p>
-<div class="bar">
- <label><input type="checkbox" id="transpo" checked> Transportation-related only</label>
- <label>Type <select id="type"><option value="">All</option></select></label>
- <input type="search" id="q" placeholder="Search address…">
- <span id="shown" class="sub"></span>
-</div>
+<div class="toggles" id="toggles"></div>
 <div id="map"></div>
-<div class="grid">
- <div class="scroll"><table><thead><tr><th>Request type</th><th class="n">Count</th></tr></thead><tbody id="counts"></tbody></table></div>
- <div class="scroll"><table><thead><tr><th>Date</th><th>Type</th><th>Address</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div>
-</div>
-<p class="sub">Source: <a id="src" href="#">MyLA311 Cases 2026</a>, City of Los Angeles. Filtered by the dataset's neighborhood council field (Silver Lake NC).</p>
+<p class="more"><a href="311/">More 311 data &rarr;</a></p>
+
+<h2>Transit</h2>
+<p class="sub">Bus routes and the B Line through and near the NC, over a light layer of main streets.</p>
+<a class="fig" href="transit/"><img src="streets/silver-lake-streets.png" alt="Map of bus routes 2, 4, 10, 92, 93, 182, 296, the Echo Park DASH, nearby routes and the B Line with its Vermont stations, drawn over thin gray main streets around Silver Lake" loading="lazy"></a>
+<p class="more"><a href="transit/">More transit data &rarr;</a></p>
+
+<p class="sub" style="margin-top:22px">311: <a id="src" href="https://data.lacity.org/d/2cy6-i7zn">MyLA311 Cases 2026</a>, City of Los Angeles, filtered to the Silver Lake NC. Map &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Transit: LA Metro and LADOT schedule data.</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const TRANSPO=/street|pavement|sidewalk|curb|traffic|parking|streetlight|obstruction|bus stop|barricade|dockless|pothole|sweeping|general street|flooding/i;
-const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const map=L.map("map").setView([34.087,-118.27],14);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
-const layer=L.layerGroup().addTo(map);let D;
 const $=id=>document.getElementById(id);
-fetch("data/cases.json").then(r=>r.json()).then(d=>{D=d;
- $("meta").textContent=`${d.count} requests since ${d.since.slice(0,10)} · updated ${d.generated.slice(0,16).replace("T"," ")} UTC`;
- $("src").href=d.source;
- [...new Set(d.cases.map(c=>c.type))].sort().forEach(t=>$("type").add(new Option(t,t)));
- ["transpo","type","q"].forEach(i=>$(i).addEventListener("input",render));render();
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const COLORS=["#d95f02","#1b9e77","#7570b3","#e7298a","#66a61e"];
+const map=L.map("map",{zoomSnap:0.25}).setView([34.09,-118.27],14);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map);
+fetch("data/cases.json").then(r=>r.json()).then(d=>{
+  const end=new Date(d.generated),start=new Date(end-30*864e5);
+  const recent=d.cases.filter(c=>new Date(c.created+"Z")>=start);   // created times are local, close enough for a 30-day cut
+  const counts={};recent.forEach(c=>counts[c.type]=(counts[c.type]||0)+1);
+  const top=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const shown=top.reduce((s,[,n])=>s+n,0);
+  $("meta").textContent=`${shown.toLocaleString()} of ${recent.length.toLocaleString()} requests from ${start.toISOString().slice(0,10)} to ${end.toISOString().slice(0,10)} fall in the five most common types. Updated ${d.generated.slice(0,16).replace("T"," ")} UTC.`;
+  const groups={},pts=[];
+  top.forEach(([type],i)=>{
+    const g=L.layerGroup().addTo(map);groups[type]=g;
+    recent.filter(c=>c.type===type&&c.lat&&c.lon).forEach(c=>{
+      pts.push([c.lat,c.lon]);
+      L.circleMarker([c.lat,c.lon],{radius:5,color:"#fff",weight:1,fillColor:COLORS[i],fillOpacity:.85})
+        .bindPopup(`<b>${esc(c.type)}</b><br>${esc(c.address)}<br>${esc(c.created.slice(0,10))} · ${esc(c.status)}`).addTo(g);
+    });
+  });
+  if(pts.length)map.fitBounds(pts,{padding:[16,16]});
+  $("toggles").innerHTML=top.map(([type,n],i)=>`<label><input type="checkbox" data-t="${esc(type)}" checked><span class="dot" style="background:${COLORS[i]}"></span>${esc(type)} <span class="n">${n}</span></label>`).join("");
+  $("toggles").addEventListener("change",e=>{const g=groups[e.target.dataset.t];if(g)e.target.checked?g.addTo(map):map.removeLayer(g)});
+  window.__ready=true;
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
-function render(){
- const q=$("q").value.toLowerCase(),t=$("type").value,tr=$("transpo").checked;
- const cs=D.cases.filter(c=>(!tr||TRANSPO.test(c.type||""))&&(!t||c.type===t)&&(!q||(c.address||"").toLowerCase().includes(q)));
- $("shown").textContent=`${cs.length} shown`;
- layer.clearLayers();
- cs.filter(c=>c.lat&&c.lon).forEach(c=>L.circleMarker([c.lat,c.lon],{radius:5,weight:1,fillOpacity:.6})
-  .bindPopup(`<b>${esc(c.type)}</b><br>${esc(c.address)}<br>${esc(c.created.slice(0,10))} · ${esc(c.status)}`).addTo(layer));
- const n={};cs.forEach(c=>n[c.type]=(n[c.type]||0)+1);
- $("counts").innerHTML=Object.entries(n).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join("");
- $("rows").innerHTML=cs.slice(0,500).map(c=>`<tr><td>${esc(c.created.slice(0,10))}</td><td>${esc(c.type)}</td><td>${esc(c.address)}</td><td>${esc(c.status)}</td></tr>`).join("");
-}
-</script></main></body></html>
+</script>
+<script src="nav.js" data-root="./" data-page="home"></script>
+</main></body></html>

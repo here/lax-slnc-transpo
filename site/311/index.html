@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Silver Lake 311 Data</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:6px 16px 16px}
+h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}
+#map{height:420px;border:1px solid var(--line);border-radius:6px;margin:12px 0}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.bar label{display:flex;gap:6px;align-items:center}
+select,input[type=search]{padding:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+.scroll{max-height:460px;overflow:auto}a{color:var(--acc)}
+</style></head><body><main>
+<h1>311 data</h1>
+<p class="sub" id="meta">Loading…</p>
+<div class="bar">
+ <label><input type="checkbox" id="transpo" checked> Transportation-related only</label>
+ <label>Type <select id="type"><option value="">All</option></select></label>
+ <input type="search" id="q" placeholder="Search address…">
+ <span id="shown" class="sub"></span>
+</div>
+<div id="map"></div>
+<div class="grid">
+ <div class="scroll"><table><thead><tr><th>Request type</th><th class="n">Count</th></tr></thead><tbody id="counts"></tbody></table></div>
+ <div class="scroll"><table><thead><tr><th>Date</th><th>Type</th><th>Address</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div>
+</div>
+<p class="sub">Source: <a id="src" href="#">MyLA311 Cases 2026</a>, City of Los Angeles. Filtered by the dataset's neighborhood council field (Silver Lake NC).</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const TRANSPO=/street|pavement|sidewalk|curb|traffic|parking|streetlight|obstruction|bus stop|barricade|dockless|pothole|sweeping|general street|flooding/i;
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const map=L.map("map").setView([34.087,-118.27],14);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map);
+const layer=L.layerGroup().addTo(map);let D;
+const $=id=>document.getElementById(id);
+fetch("../data/cases.json").then(r=>r.json()).then(d=>{D=d;
+ $("meta").textContent=`${d.count} requests since ${d.since.slice(0,10)} · updated ${d.generated.slice(0,16).replace("T"," ")} UTC`;
+ $("src").href=d.source;
+ [...new Set(d.cases.map(c=>c.type))].sort().forEach(t=>$("type").add(new Option(t,t)));
+ ["transpo","type","q"].forEach(i=>$(i).addEventListener("input",render));render();
+}).catch(e=>$("meta").textContent="Failed to load data: "+e);
+function render(){
+ const q=$("q").value.toLowerCase(),t=$("type").value,tr=$("transpo").checked;
+ const cs=D.cases.filter(c=>(!tr||TRANSPO.test(c.type||""))&&(!t||c.type===t)&&(!q||(c.address||"").toLowerCase().includes(q)));
+ $("shown").textContent=`${cs.length} shown`;
+ layer.clearLayers();
+ cs.filter(c=>c.lat&&c.lon).forEach(c=>L.circleMarker([c.lat,c.lon],{radius:5,weight:1,fillOpacity:.6})
+  .bindPopup(`<b>${esc(c.type)}</b><br>${esc(c.address)}<br>${esc(c.created.slice(0,10))} · ${esc(c.status)}`).addTo(layer));
+ const n={};cs.forEach(c=>n[c.type]=(n[c.type]||0)+1);
+ $("counts").innerHTML=Object.entries(n).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${v}</td></tr>`).join("");
+ $("rows").innerHTML=cs.slice(0,500).map(c=>`<tr><td>${esc(c.created.slice(0,10))}</td><td>${esc(c.type)}</td><td>${esc(c.address)}</td><td>${esc(c.status)}</td></tr>`).join("");
+}
+</script>
+<script src="../nav.js" data-root="../" data-page="311"></script>
+</main></body></html>

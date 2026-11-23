@@ -6,7 +6,7 @@
 :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9)}
 @media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9)}}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:16px}
+main{max-width:1100px;margin:0 auto;padding:6px 16px 16px}
 h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}a{color:var(--acc)}
 #map{height:760px;border:1px solid var(--line);border-radius:6px;margin:12px 0;background:var(--canvas)}
 @media(max-width:700px){#map{height:75vh}}
@@ -17,7 +17,7 @@ h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}a{color
 .slbl:before{display:none}
 .stn{background:#fff;color:#111;border:2px solid #eb131b;font-weight:700;box-shadow:none}
 </style></head><body><main>
-<p class="sub"><a href="../">&larr; 311 dashboard</a> · <a href="../transit/">Full transit page</a></p>
+<p class="sub"><a href="../transit/">&larr; Full transit page</a></p>
 <h1>Silver Lake transit over key streets <span class="sub">(example)</span></h1>
 <p class="sub" id="meta">Loading…</p>
 <div class="legend" id="legend"></div>
@@ -69,4 +69,6 @@ Promise.all([fetch("data/streets.json").then(r=>r.json()),fetch("../transit/data
   $("legend").addEventListener("change",e=>{const g=groups[e.target.dataset.r];if(!g)return;e.target.checked?g.addTo(map):map.removeLayer(g)});
   window.__ready=true;
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
-</script></main></body></html>
+</script>
+<script src="../nav.js" data-root="../" data-page="transit"></script>
+</main></body></html>
