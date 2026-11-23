@@ -31,7 +31,7 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 <h2>How often they run</h2>
 <p class="sub" id="hwsub">Minutes between vehicles (headway) on a typical weekday.</p>
-<div class="scroll"><table><thead><tr><th>Route</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>Service hours</th><th>Description</th></tr></thead><tbody id="hw"></tbody></table></div>
+<div class="scroll"><table><thead><tr><th>Route</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th class="n">Overnight</th><th>Service hours</th><th>Description</th></tr></thead><tbody id="hw"></tbody></table></div>
 <p class="sub" id="hwnote"></p>
 
 <h2>Bus 2 and Bus 4 to rail</h2>
@@ -40,7 +40,7 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 <div id="map2" style="height:680px;border:1px solid var(--line);border-radius:6px;margin:12px 0"></div>
 <div class="scroll"><table><thead><tr><th>Rail station</th><th>Rail lines</th><th>Bus 2 stop</th><th>Bus 4 stop</th></tr></thead><tbody id="ctrans"></tbody></table></div>
 <p class="sub" style="margin-top:14px"><b>D Line frequency at Westlake/MacArthur Park</b> (minutes between trains, weekday)</p>
-<div class="scroll"><table><thead><tr><th>Line</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>Service hours</th></tr></thead><tbody id="chw"></tbody></table></div>
+<div class="scroll"><table><thead><tr><th>Line</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th class="n">Overnight</th><th>Service hours</th></tr></thead><tbody id="chw"></tbody></table></div>
 <p class="sub" id="cnote"></p>
 
 <h2>B Line connections</h2>
@@ -99,9 +99,9 @@ fetch("data/transit.json").then(r=>r.json()).then(d=>{
   });
   $("conn").innerHTML=rows.join("");
   const H=d.headways,fm=v=>v==null?"—":v,W=H.windows;
-  $("hwsub").textContent=`Minutes between vehicles (headway), typical weekday (${H.date}). Peak ${W.peak}; midday ${W.midday}; off-peak ${W.offpeak}.`;
+  $("hwsub").textContent=`Minutes between vehicles (headway), typical weekday (${H.date}). Peak ${W.peak}; midday ${W.midday}; off-peak ${W.offpeak}; overnight ${W.overnight}.`;
   $("hw").innerHTML=HW.combine(H.rows.filter(r=>r.route!=="D"),order).map(r=>
-    `<tr><td><span class="chip" style="background:${d.colors[r.route]}">${esc(lab(r.route))}</span></td><td class="n">${r.peak}</td><td class="n">${r.midday}</td><td class="n">${r.offpeak}</td><td style="white-space:nowrap">${r.hours}</td><td>${esc((window.ROUTE_THEMES||{})[r.route]||"")}</td></tr>`).join("");
+    `<tr><td><span class="chip" style="background:${d.colors[r.route]}">${esc(lab(r.route))}</span></td><td class="n">${r.peak}</td><td class="n">${r.midday}</td><td class="n">${r.offpeak}</td><td class="n">${r.overnight}</td><td style="white-space:nowrap">${r.hours}</td><td>${esc((window.ROUTE_THEMES||{})[r.route]||"")}</td></tr>`).join("");
   const C=d.corridor,COL={...d.colors,"E":"#fdb913","A":"#0072bc","C":"#58a738","K":"#e56db1"};
   const map2=L.map("map2",{zoomSnap:0.25});
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"}).addTo(map2);
@@ -125,10 +125,10 @@ fetch("data/transit.json").then(r=>r.json()).then(d=>{
   if(Wst){
     const b2=H.rows.filter(r=>r.route==="2"),dl=H.rows.filter(r=>r.route==="D");
     $("csub").textContent=`Bus 2 runs down Alvarado St to Westlake/MacArthur Park Station, a B and D Line station. The nearest Bus 2 stop, ${Wst.bus2.stop}, is ${Wst.bus2.m} m (straight line) from it. Bus 2 runs about every ${Math.min(...b2.map(r=>r.peak))} min at peak; the D Line every ${dl[0]?dl[0].peak:"?"} min. Bus 4 continues through downtown and meets the B, D, A and E lines.`;
-    $("chw").innerHTML=HW.combine(dl).map(r=>`<tr><td>${RL("D")}</td><td class="n">${r.peak}</td><td class="n">${r.midday}</td><td class="n">${r.offpeak}</td><td style="white-space:nowrap">${r.hours}</td></tr>`).join("");
+    $("chw").innerHTML=HW.combine(dl).map(r=>`<tr><td>${RL("D")}</td><td class="n">${r.peak}</td><td class="n">${r.midday}</td><td class="n">${r.offpeak}</td><td class="n">${r.overnight}</td><td style="white-space:nowrap">${r.hours}</td></tr>`).join("");
   }
   $("cnote").textContent="Rail lines are dotted and drawn without station detail; only stations where Bus 2 or Bus 4 stops within 350 m are marked. B and D run to Union Station. The E Line does not stop at Union Station: it runs through 7th St/Metro Center, Historic Broadway and Little Tokyo/Arts District, so transfer to or from it downtown rather than at Union Station. Distances are straight-line from the schedule data; walking and the transfers themselves are not verified on the ground. D Line headways are at Westlake/MacArthur Park Station.";
-  $("hwnote").textContent="Each figure is the median gap between consecutive departures at one stop per direction (the busiest stop at or nearest the NC), from the published schedule, not live arrivals. A range such as 22–26 means the two directions differ. Service hours run from the first to the last departure in either direction, rounded inward to the hour; 24h means no gap of more than an hour overnight. Route 10 includes route 48 trips.";
+  $("hwnote").textContent="Each figure is the median gap between consecutive departures at one stop per direction (the busiest stop at or nearest the NC), from the published schedule, not live arrivals. A range such as 22–26 means the two directions differ. Service hours run from the first to the last departure in either direction, rounded inward to the hour; 24h means no gap of more than an hour overnight. Overnight shows a headway only where buses or trains run through all of 2-5 AM; ‘(one way)’ means only one direction does, and ‘from 4:24’ means service starts inside that window. Route 10 includes route 48 trips.";
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
 </script>
 <script src="../nav.js" data-root="../" data-page="transit"></script>

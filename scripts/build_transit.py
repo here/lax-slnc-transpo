@@ -37,14 +37,29 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "site", "transit", "data", "
 MARGIN_DEG = 0.010        # ~1 km of context around the NC outline (shows the Echo Park DASH)
 # Headways: measured on one typical weekday (override with HEADWAY_DATE=YYYY-MM-DD).
 # Windows are hours of the service day. Peak = AM + PM; off-peak = early morning + evening/night.
-WINDOWS = {"peak": [(6, 9), (15, 19)], "midday": [(9, 15)], "offpeak": [(0, 6), (19, 30)]}
+# Hours >= 24 are after midnight on the same service day (GTFS times run past 24:00), so 2-5 AM is both 2-5 and 26-29.
+WINDOWS = {"peak": [(6, 9), (15, 19)], "midday": [(9, 15)],
+           "offpeak": [(0, 2), (5, 6), (19, 26), (29, 30)], "overnight": [(2, 5), (26, 29)]}
+WINDOW_TEXT = {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "5-6 AM and 7 PM-2 AM",
+               "overnight": "2-5 AM"}
 MAX_WALK_M = 1000         # list nearest stop of each route within this walk of a B Line station
 
 
-def fetch(url, dest):
-    with urllib.request.urlopen(url, timeout=300) as r, open(dest, "wb") as f:
-        while chunk := r.read(1 << 20):
-            f.write(chunk)
+def fetch(url, dest, tries=5):
+    """Download url to dest, retrying with backoff on rate limits (429) and server errors."""
+    import time, urllib.error
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(url, timeout=300) as r, open(dest, "wb") as f:
+                while chunk := r.read(1 << 20):
+                    f.write(chunk)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 500, 502, 503, 504) or i == tries - 1:
+                raise
+            wait = int(e.headers.get("Retry-After") or 0) or 15 * (i + 1)
+            print(f"  {e.code} on {url}; retrying in {wait}s", file=sys.stderr)
+            time.sleep(wait)
 
 
 def rows(path):
@@ -120,7 +135,10 @@ def hhmm(sec):
 
 
 def headways(deps):
-    """Median minutes between consecutive departures inside each window, per category."""
+    """Median minutes between consecutive departures inside each window, per category.
+    Overnight (2-5 AM) only counts as service when departures cover the whole window: no stretch of more than an
+    hour without one, counting from 2:00 and to 5:00. Otherwise it is None, with overnight_from / overnight_until
+    giving the first or last departure in the window (e.g. trains that start at 4:24)."""
     deps = sorted(deps)
     out = {}
     for cat, spans in WINDOWS.items():
@@ -129,6 +147,19 @@ def headways(deps):
             seg = [t for t in deps if lo * 3600 <= t < hi * 3600]
             gaps += [(b - a) / 60 for a, b in zip(seg, seg[1:])]
         out[cat] = round(statistics.median(gaps)) if gaps else None
+    night = sorted({(t % 86400) // 60 for t in deps if any(lo * 3600 <= t < hi * 3600 for lo, hi in WINDOWS["overnight"])})
+    out["overnight_from"] = out["overnight_until"] = None
+    if night:
+        start, end = WINDOWS["overnight"][0][0] * 60, WINDOWS["overnight"][0][1] * 60
+        inner = [b - a for a, b in zip(night, night[1:])]
+        if max([night[0] - start, end - night[-1]] + inner) > 60:
+            out["overnight"] = None
+            if night[0] - start > 60:
+                out["overnight_from"] = f"{night[0] // 60}:{night[0] % 60:02d}"
+            if end - night[-1] > 60:
+                out["overnight_until"] = f"{night[-1] // 60}:{night[-1] % 60:02d}"
+        else:
+            out["overnight"] = round(statistics.median(inner)) if inner else None
     return out
 
 
@@ -324,12 +355,12 @@ def main():
            "boundary": mapping(nc), "view": list(view), "colors": {**BUS_COLORS, "B": RAIL_COLOR, "D": D_COLOR},
            "lines": lines, "stops": stops, "corridor": corridor,
            "headways": {"date": day.isoformat(), "rows": hw_rows,
-                        "windows": {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "before 6 AM and after 7 PM"}}}
+                        "windows": WINDOW_TEXT}}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
     for h in hw_rows:
-        print(f"  {h['route']:>5} {h['direction'][:22]:22} @{h['stop'][:28]:28} peak={h['peak']} mid={h['midday']} off={h['offpeak']} trips={h['trips']}", file=sys.stderr)
+        print(f"  {h['route']:>5} {h['direction'][:22]:22} @{h['stop'][:28]:28} peak={h['peak']} mid={h['midday']} off={h['offpeak']} night={h['overnight']} trips={h['trips']}", file=sys.stderr)
     for t in transfers:
         print(f"  transfer {t['station']} {t['lines']} bus2={t.get('bus2', {}).get('m')} bus4={t.get('bus4', {}).get('m')}", file=sys.stderr)
     print(f"lines={len(lines)} stops={len(stops)} stations={len(stations)} -> {OUT}", file=sys.stderr)

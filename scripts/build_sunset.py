@@ -13,8 +13,8 @@ from shapely.geometry import LineString, MultiLineString, Point, box
 from shapely.ops import linemerge, substring, unary_union
 
 sys.path.insert(0, os.path.dirname(__file__))
-from build_transit import (GITLAB, active_services, fetch, headways, hhmm, meters, rows, secs,  # noqa: E402
-                           service_date)
+from build_transit import (GITLAB, WINDOW_TEXT, active_services, fetch, headways, hhmm, meters, rows,  # noqa: E402
+                           secs, service_date)
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "site", "sunset", "data", "sunset.json")
 ROADS = "https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads/FeatureServer/0/query"
@@ -265,7 +265,7 @@ def main():
            "runners_up": [{"route": rname[r][0], "trips": ntrips[r]} for r in ranked[N_CROSSING:N_CROSSING + 5]],
            "tram": tram,
            "stadium": {"name": "Dodger Stadium", "lon": DODGER_STADIUM[0], "lat": DODGER_STADIUM[1]},
-           "windows": {"peak": "6-9 AM and 3-7 PM", "midday": "9 AM-3 PM", "offpeak": "before 6 AM and after 7 PM"}}
+           "windows": WINDOW_TEXT}
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w") as f:
         json.dump(out, f, separators=(",", ":"))
@@ -273,7 +273,7 @@ def main():
     for t in transfers:
         print(f"  {t['route']:>4}: {t['stop']} <-> Bus 4 {t['bus4_stop']} ({t['m']} m)", file=sys.stderr)
     for h in hw_rows:
-        print(f"  {h['route']:>4} {h['direction'][:28]:28} @{h['stop'][:26]:26} peak={h['peak']} mid={h['midday']} off={h['offpeak']}", file=sys.stderr)
+        print(f"  {h['route']:>4} {h['direction'][:28]:28} @{h['stop'][:26]:26} peak={h['peak']} mid={h['midday']} off={h['offpeak']} night={h['overnight']}", file=sys.stderr)
     print(f"streets {list(streets)}; stations {[(s['name'], s['lines']) for s in stations.values()]}; "
           f"lines {len(out_lines)}; bus4 stops {len(main_stops)} -> {OUT}", file=sys.stderr)
 

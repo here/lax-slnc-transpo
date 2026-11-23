@@ -1,5 +1,5 @@
 // Shared helpers for the "How often they run" tables: one row per route, both directions combined.
-//   HW.combine(rows, order) -> [{route, peak, midday, offpeak, hours}]
+//   HW.combine(rows, order) -> [{route, peak, midday, offpeak, overnight, hours}]
 // rows come from the data files: one per route and direction, with headways in minutes and first/last
 // departures as "HH:MM" clock times (service can run past midnight, so last may be earlier than first).
 window.HW = (function () {
@@ -35,6 +35,19 @@ window.HW = (function () {
     return lo === hi ? String(lo) : `${lo}–${hi}`;
   }
 
+  // Overnight (2-5 AM): a number only where departures cover the whole window. "58 (one way)" when only one
+  // direction does; "from 4:24" / "until 3:18" when service starts or stops inside the window; "—" when none.
+  function night(rs) {
+    const nums = rs.map(r => r.overnight).filter(x => x != null);
+    if (nums.length) return range(nums) + (nums.length < rs.length ? " (one way)" : "");
+    const toM = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    const from = rs.map(r => r.overnight_from).filter(Boolean).sort((a, b) => toM(a) - toM(b));
+    if (from.length) return "from " + from[0];
+    const until = rs.map(r => r.overnight_until).filter(Boolean).sort((a, b) => toM(b) - toM(a));
+    if (until.length) return "until " + until[0];
+    return "—";
+  }
+
   function combine(rows, order) {
     const by = new Map();
     rows.forEach(r => { if (!by.has(r.route)) by.set(r.route, []); by.get(r.route).push(r); });
@@ -43,8 +56,8 @@ window.HW = (function () {
     return keys.map(route => {
       const rs = by.get(route);
       return { route, peak: range(rs.map(r => r.peak)), midday: range(rs.map(r => r.midday)),
-               offpeak: range(rs.map(r => r.offpeak)), hours: hours(rs) };
+               offpeak: range(rs.map(r => r.offpeak)), overnight: night(rs), hours: hours(rs) };
     });
   }
-  return { combine, hours, range };
+  return { combine, hours, range, night };
 })();
