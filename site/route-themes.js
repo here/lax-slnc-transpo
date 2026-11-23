@@ -3,7 +3,7 @@
 window.ROUTE_THEMES = {
   "2": "Sunset and Alvarado",
   "4": "Santa Monica Blvd and Sunset to Downtown LA",
-  "10": "Beverly Blvd and Temple",
+  "10": "Melrose / Hoover / Temple and south on Main",
   "14": "Beverly Blvd: Downtown LA to Cedars-Sinai",
   "28": "Olympic Blvd: Downtown LA to Century City",
   "33": "Venice Blvd: Downtown LA to Santa Monica",
