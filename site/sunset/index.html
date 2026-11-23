@@ -3,8 +3,8 @@
 <title>Sunset Blvd Transit</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9);--main:#6b6b6b}
-@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9);--main:#bdbdbd}}
+:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#ddd;--acc:#0b6bcb;--canvas:#f6f4ee;--lbl:#8a8a8a;--st:#a9a9a9;--fwy:#8c8c8c;--halo:rgba(246,244,238,.9);--main:#1b9e77}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--acc:#6db3ff;--canvas:#1f1f1d;--lbl:#8f8f8f;--st:#5c5c58;--fwy:#77776f;--halo:rgba(31,31,29,.9);--main:#2bb88c}}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
 main{max-width:1100px;margin:0 auto;padding:6px 16px 16px}
 h1{font-size:1.4rem;margin:6px 0 4px}h2{font-size:1.05rem;margin:22px 0 6px}
@@ -53,7 +53,7 @@ map.createPane("ref").style.zIndex=380;
 const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors",opacity:.5});
 fetch("data/sunset.json").then(r=>r.json()).then(d=>{
   const C={...d.colors,"4":css("--main")},groups={},fm=v=>v==null?"—":v;
-  const chip=r=>`<span class="chip" style="background:${C[r]};color:${r==="4"&&css("--main")==="#bdbdbd"?"#111":(r==="E"?"#000":"#fff")}">${esc(r)}</span>`;
+  const chip=r=>`<span class="chip" style="background:${C[r]};color:${r==="E"?"#000":"#fff"}">${esc(r)}</span>`;
   map.fitBounds([[d.view[1],d.view[0]],[d.view[3],d.view[2]]],{padding:[6,6]});
   // reference streets
   const ref=L.layerGroup().addTo(map);groups.__ref=ref;

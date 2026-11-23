@@ -30,7 +30,7 @@ DODGER_STADIUM = (-118.2400, 34.0738)   # label position only (stadium outline n
 # from Union Station along Alameda St, along the edge of Los Angeles State Historic Park with a station by the
 # A Line's Chinatown station, along the A Line tracks to an angle point, up Bishops Rd, across the 110 near
 # Stadium Way to the stadium. Station positions and the last stretch are approximate.
-COLORS = ["#d95f02", "#1b9e77", "#7570b3", "#e7298a", "#66a61e"]
+COLORS = ["#d95f02", "#a6761d", "#7570b3", "#e7298a", "#66a61e"]   # teal is kept for Bus 4, as on the transit page
 RAIL_COLORS = {"A": "#0072bc", "B": "#eb131b", "D": "#a05da5", "E": "#fdb913"}
 STREETS = {
     "Sunset Blvd": "%SUNSET BLVD%", "Cesar E Chavez Ave": "%CESAR E CHAVEZ AVE%", "Douglas St": "%DOUGLAS ST%",
@@ -119,7 +119,7 @@ def main():
     chosen = PINNED or ranked[:N_CROSSING]
     keep = [MAIN_ROUTE] + chosen
     label = {rid: rname[rid][0] for rid in keep}
-    colors = {"4": "#1b1b1b", **{label[r]: COLORS[i] for i, r in enumerate(chosen)}, **RAIL_COLORS}
+    colors = {"4": "#1b9e77", **{label[r]: COLORS[i] for i, r in enumerate(chosen)}, **RAIL_COLORS}
 
     for rid in keep:
         seen = set()
