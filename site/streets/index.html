@@ -22,7 +22,7 @@ h1{font-size:1.4rem;margin:0 0 4px}.sub{color:var(--mut);margin:0 0 12px}a{color
 <p class="sub" id="meta">Loading…</p>
 <div class="legend" id="legend"></div>
 <div id="map"></div>
-<p class="sub">A lighter companion to the <a href="../transit/">full transit map</a>: the transit lines are the point, and only twelve streets (Vermont, Sunset, Silver Lake Blvd, Hyperion, Temple, Glendale, Alvarado, Rowena, Santa Monica, Beverly, Melrose, US-101) are drawn as thin gray lines for orientation. Bus stops are left off; B Line stops are shown. Dotted lines are the B Line; dashed lines are nearby routes outside the NC. Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a>. Transit: LA Metro and LADOT GTFS. Basemap, when on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. NC outline is approximate. <a href="silver-lake-streets.png">Download as PNG</a>.</p>
+<p class="sub">A lighter companion to the <a href="../transit/">full transit map</a>: the transit lines are the point, and only twelve streets (Vermont, Sunset, Silver Lake Blvd, Hyperion, Temple, Glendale, Alvarado, Rowena, Santa Monica, Beverly, Melrose, US-101) are drawn as thin gray lines for orientation. Bus stops are left off; B Line stops are shown. Dotted lines are the B Line; routes marked "nearby" run outside the NC. Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a>. Transit: LA Metro and LADOT GTFS. Basemap, when on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. NC boundary: Neighborhood Councils (Certified), City of Los Angeles, via LA GeoHub. <a href="silver-lake-streets.png">Download as PNG</a>.</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
@@ -50,21 +50,21 @@ Promise.all([fetch("data/streets.json").then(r=>r.json()),fetch("../transit/data
   ORDER.forEach(r=>groups[r]=L.layerGroup().addTo(map));
   T.lines.forEach(l=>{
     L.polyline(l.coords.map(c=>[c[1],c[0]]),{color:T.colors[l.route],weight:l.route==="B"?5:(l.in_nc?5:3),opacity:l.in_nc||l.route==="B"?.95:.7,
-      dashArray:l.route==="B"?"2 8":(NEARBY.has(l.route)?"7 5":null),lineCap:"round"}).bindTooltip(NAMES[l.route]||l.route).addTo(groups[l.route]);
+      dashArray:l.route==="B"?"2 8":null,lineCap:"round"}).bindTooltip(NAMES[l.route]||l.route).addTo(groups[l.route]);
   });
   // train stops only (no bus stops)
   T.stops.filter(s=>s.mode==="rail").forEach(s=>{
     L.circleMarker([s.lat,s.lon],{radius:9,color:"#fff",weight:2,fillColor:"#eb131b",fillOpacity:1}).addTo(groups.B)
       .bindTooltip(s.name.replace(/ Station.*/,"")+" (B Line)",{permanent:true,direction:"left",offset:[-9,0],className:"stn"});
   });
-  groups.__nc=L.geoJSON(T.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.04}}).bindTooltip("Silver Lake NC (approximate)");
+  groups.__nc=L.geoJSON(T.boundary,{style:{color:"#0b6bcb",weight:3,dashArray:"6 4",fillOpacity:.04}}).bindTooltip("Silver Lake NC boundary");
   groups.__osm=tiles;
   const dashed='repeating-linear-gradient(90deg,#0b6bcb 0 6px,transparent 6px 10px)';
   $("meta").textContent=`${ORDER.length-1} bus routes plus the B Line, over ${Object.keys(S.streets).length} reference streets. Toggle anything in the legend.`;
   $("legend").innerHTML=
     `<label><input type="checkbox" data-r="__ref" checked><span class="sw" style="background:#a9a9a9;height:3px"></span>Reference streets</label>`+
     `<label><input type="checkbox" data-r="__osm"><span class="sw" style="background:#aab"></span>OpenStreetMap basemap</label>`+
-    `<label><input type="checkbox" data-r="__nc"><span class="sw" style="background:${dashed}"></span>NC outline (approximate)</label>`+
+    `<label><input type="checkbox" data-r="__nc"><span class="sw" style="background:${dashed}"></span>NC boundary</label>`+
     ORDER.map(r=>`<label><input type="checkbox" data-r="${r}" checked><span class="sw" style="background:${T.colors[r]}"></span>${esc(NAMES[r])}</label>`).join("");
   $("legend").addEventListener("change",e=>{const g=groups[e.target.dataset.r];if(!g)return;e.target.checked?g.addTo(map):map.removeLayer(g)});
   window.__ready=true;

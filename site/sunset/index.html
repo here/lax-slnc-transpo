@@ -36,14 +36,15 @@ th.n,td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 <h2>How often they run</h2>
 <p class="sub" id="hwsub"></p>
-<div class="scroll"><table><thead><tr><th>Line</th><th>Direction</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>First / last</th><th>Description</th></tr></thead><tbody id="hw"></tbody></table></div>
-<p class="sub">Median minutes between departures at one stop per direction, from the published weekday schedule, not live arrivals. Distances are straight-line between stops and are not checked on the ground.</p>
+<div class="scroll"><table><thead><tr><th>Line</th><th class="n">Peak</th><th class="n">Midday</th><th class="n">Off-peak</th><th>Service hours</th><th>Description</th></tr></thead><tbody id="hw"></tbody></table></div>
+<p class="sub">Median minutes between departures at one stop per direction, from the published weekday schedule, not live arrivals; a range such as 8–10 means the two directions differ. Service hours run from the first to the last departure in either direction, rounded inward to the hour; 24h means no gap of more than an hour overnight. Distances are straight-line between stops and are not checked on the ground.</p>
 
 <div class="todo"><b>Aerial tram (proposed):</b> the LA ART gondola from Union Station to Dodger Stadium, with a station at Los Angeles State Historic Park by the A Line's Chinatown station. It is drawn from its published route description (along Alameda St, the edge of the park and the A Line tracks, then up Bishops Rd and across the 110 near Stadium Way), not from engineering drawings: station positions are approximate and the dotted stretch past Bishops Rd is a guess at the path. Status: proposed; Metro's board approved its environmental report with conditions in February 2024. Source: <a href="https://en.wikipedia.org/wiki/Los_Angeles_Aerial_Rapid_Transit">Wikipedia, Los Angeles Aerial Rapid Transit</a>.</div>
 
 <p class="sub">Transit: LA Metro schedule data (bus and rail). Streets: <a href="https://caltrans-gis.dot.ca.gov/arcgis/rest/services/CHhighway/All_Roads">Caltrans All Roads</a>. Basemap, when on: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. The Dodger Stadium label marks its location; the stadium outline is not drawn (turn on the basemap to see it).</p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="../route-themes.js"></script>
+<script src="../headways.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -102,9 +103,8 @@ fetch("data/sunset.json").then(r=>r.json()).then(d=>{
   $("pick").textContent=`Lines picked by weekday trips (${d.date}) among all lines that touch Bus 4 between Douglas St and Union Station. Next busiest: ${d.runners_up.map(r=>`${r.route} (${r.trips})`).join(", ")}.`;
   $("xfer").innerHTML=d.transfers.map(t=>`<tr><td>${chip(t.route)}</td><td>${esc(t.desc)}</td><td class="n">${t.trips}</td><td>${esc(t.stop)}</td><td>${esc(t.bus4_stop)}</td><td class="n">${t.m<=60?"same corner":t.m+" m"}</td></tr>`).join("");
   const W=d.windows;$("hwsub").textContent=`Minutes between buses, weekday ${d.date}. Peak ${W.peak}; midday ${W.midday}; off-peak ${W.offpeak}.`;
-  let prev="";
-  $("hw").innerHTML=d.headways.map(r=>{const f=r.route!==prev;prev=r.route;
-    return `<tr><td>${f?chip(r.route):""}</td><td>${esc(r.direction)}</td><td class="n">${fm(r.peak)}</td><td class="n">${fm(r.midday)}</td><td class="n">${fm(r.offpeak)}</td><td style="white-space:nowrap">${r.first}–${r.last}</td><td>${f?esc((window.ROUTE_THEMES||{})[r.route]||""):""}</td></tr>`}).join("");
+  $("hw").innerHTML=HW.combine(d.headways).map(r=>
+    `<tr><td>${chip(r.route)}</td><td class="n">${r.peak}</td><td class="n">${r.midday}</td><td class="n">${r.offpeak}</td><td style="white-space:nowrap">${r.hours}</td><td>${esc((window.ROUTE_THEMES||{})[r.route]||"")}</td></tr>`).join("");
   window.__ready=true;
 }).catch(e=>$("meta").textContent="Failed to load data: "+e);
 </script>

@@ -3,19 +3,16 @@
 
 Inputs (downloaded here, never committed):
   * LA Metro GTFS bus + rail feeds (gitlab.com/LACMTA/gtfs_bus, gtfs_rail)
-  * 311 case coordinates tagged "SILVER LAKE NC" (data.lacity.org)
+  * Silver Lake NC boundary, Neighborhood Councils (Certified) layer (maps.lacity.org, via LA GeoHub)
 
-The NC outline is APPROXIMATE: a concave hull of those 311 coordinates, because no
-official boundary polygon was reachable. Replace `boundary` with the official
-GeoJSON when available (LA GeoHub "Neighborhood Councils (Certified)").
+The NC boundary is the City's official one (LA GeoHub "Neighborhood Councils (Certified)").
 
 Needs: pip install shapely
 """
 import csv, datetime as dt, io, json, math, os, statistics, sys, tempfile, urllib.parse, urllib.request, zipfile
 from collections import Counter, defaultdict
 
-from shapely import concave_hull
-from shapely.geometry import LineString, MultiPoint, Point, mapping
+from shapely.geometry import LineString, Point, mapping
 from shapely.ops import substring, unary_union
 
 BUS_ROUTES = {"2": "2-13201", "4": "4-13201", "10": "10-13201", "92": "92-13201", "93": "93-13201", "182": "182-13201", "296": "296-13201",
@@ -61,21 +58,24 @@ def meters(a, b):
     return math.hypot(dx, dy)
 
 
+NC_LAYER = "https://maps.lacity.org/lahub/rest/services/Boundaries/MapServer/18"   # Neighborhood Councils (Certified), LA GeoHub
+
+
 def boundary():
-    q = urllib.parse.urlencode({
-        "$select": "geolocation__latitude__s as lat,geolocation__longitude__s as lon,count(*)",
-        "$where": "locator_sr_neigborhood_council_1='SILVER LAKE NC' AND geolocation__latitude__s IS NOT NULL",
-        "$group": "lat,lon", "$limit": "50000"})
-    with urllib.request.urlopen("https://data.lacity.org/resource/2cy6-i7zn.json?" + q, timeout=120) as r:
-        pts = [(float(p["lon"]), float(p["lat"])) for p in json.load(r)]
-    # West edge per the council: 101 Freeway (south), Hoover St, Fountain Ave, Hyperion (north).
-    # Pin the Hoover corners so the hull reaches Fountain and the 101 exactly there.
-    pts += [(-118.2847, 34.0958),   # Hoover & Fountain
-            (-118.2845, 34.0768)]   # Hoover & 101 Freeway
-    hull = concave_hull(MultiPoint(pts), ratio=0.3).buffer(0.0004).simplify(0.0001)
-    if hull.geom_type != "Polygon":  # keep the biggest piece
-        hull = max(hull.geoms, key=lambda g: g.area)
-    return hull, len(pts)
+    """Official Silver Lake NC boundary from the City's Neighborhood Councils (Certified) layer (LA GeoHub)."""
+    q = urllib.parse.urlencode({"where": "NAME = 'SILVER LAKE NC'", "outFields": "NAME,NC_ID", "returnGeometry": "true",
+                                "outSR": "4326", "f": "geojson"})
+    req = urllib.request.Request(NC_LAYER + "/query?" + q, headers={"User-Agent": "slnc-transit-map/1.0"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        feats = json.load(r).get("features") or []
+    if not feats:
+        raise SystemExit("Silver Lake NC boundary not found in " + NC_LAYER)
+    from shapely.geometry import shape
+    poly = shape(feats[0]["geometry"])
+    if poly.geom_type != "Polygon":
+        poly = max(poly.geoms, key=lambda g: g.area)
+    return poly, ("Official boundary: Neighborhood Councils (Certified), City of Los Angeles "
+                  f"(LA GeoHub, NC_ID {feats[0]['properties'].get('NC_ID')}).")
 
 
 def service_date(feeds=()):
@@ -145,7 +145,7 @@ def main():
     for f in ("routes", "trips", "shapes", "stops", "stop_times", "calendar", "calendar_dates"):
         fetch(GITLAB.format("gtfs_rail", f + ".txt"), os.path.join(rail, f + ".txt"))
 
-    nc, npts = boundary()
+    nc, nc_note = boundary()
     minx, miny, maxx, maxy = nc.bounds
     view = (minx - MARGIN_DEG, miny - MARGIN_DEG, maxx + MARGIN_DEG, maxy + MARGIN_DEG)
     # B Line runs under Vermont Ave, west of the NC: widen the window to include it.
@@ -320,7 +320,7 @@ def main():
 
     out = {"generated": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(timespec="seconds"),
            "gtfs_source": "https://gitlab.com/LACMTA/gtfs_bus , https://gitlab.com/LACMTA/gtfs_rail",
-           "boundary_note": f"Approximate outline: concave hull of {npts} unique 311 case locations tagged SILVER LAKE NC. Not the official boundary.",
+           "boundary_note": nc_note,
            "boundary": mapping(nc), "view": list(view), "colors": {**BUS_COLORS, "B": RAIL_COLOR, "D": D_COLOR},
            "lines": lines, "stops": stops, "corridor": corridor,
            "headways": {"date": day.isoformat(), "rows": hw_rows,
