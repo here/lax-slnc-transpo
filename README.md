@@ -9,6 +9,10 @@ Pages: `/` SLNC data (last 30 days of 311 in five chosen types, transit map imag
 - `scripts/build_streets.py` (needs `shapely`) rebuilds `site/streets/data/streets.json` from the Caltrans All Roads layer; run it after `build_transit.py`.
 - `scripts/build_sunset.py` (needs `shapely`) rebuilds `site/sunset/data/sunset.json` (GTFS + Caltrans streets); run by hand. Set `PINNED` in it to fix the list of crossing lines.
 
+## Data and evidence
+
+The transit and Sunset maps show modeled service from published schedules. Aviary reports sampled bus speeds on selected corridors. The [November 25, 2026 evidence baseline](docs/PUBLICATION_BASELINE.md) documents the map dates, the historical 311 refresh and the limits of cross-corridor comparisons. The [evidence checklist](docs/EVIDENCE_CHECKLIST.md) tracks completed verification and open questions.
+
 ## To do
 
 - Replace the approximate aerial tram (LA ART) on the Sunset Blvd map with its official alignment and station locations when a source is available (now traced from the published route description; see `build_sunset.py`).
